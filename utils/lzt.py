@@ -246,10 +246,11 @@ class LZTClient:
             "order_by": "price_to_up",
             "parse_sticky_items": "0"
         }
-        if mode == 'nonspam':
-            params["spamblock"] = "0"
-        elif mode == 'spam':
-            params["spamblock"] = "1"
+        if mode == 'spam':
+            params["spam"] = "yes"
+        else:
+            # Strictly request spam-free accounts from LZT for nonspam and other general catalog modes
+            params["spam"] = "no"
 
         if balance_rub > 0:
             params["pmax"] = int(balance_rub)
@@ -268,10 +269,18 @@ class LZTClient:
                             if item_c != c_code.upper():
                                 continue
 
-                            # Filter checks by mode
+                            # 2. STRICT SPAM FILTERING
+                            # In LZT Market:
+                            # -1 = clean / no spamblock (100% spam-free)
+                            # -3, -4 or positive unix timestamp (>0) = spamblocked
                             sb = item.get("telegram_spam_block")
-                            if mode == 'nonspam' and sb == 1:
-                                continue
+                            if mode == 'spam':
+                                if sb == -1 or sb is None:
+                                    continue
+                            else:
+                                # For nonspam mode (and any general catalog mode), STRICTLY require clean account: sb MUST be -1!
+                                if sb != -1:
+                                    continue
 
                             has_mail = bool(item.get("mail") or item.get("email_type") in ("native", "domain", "temporary"))
                             if mode == 'no_email' and has_mail:

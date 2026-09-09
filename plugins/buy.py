@@ -296,9 +296,9 @@ async def show_years(event, mode, country):
     # 1. Check local stock first
     if bot_mode in ('manual', 'hybrid'):
         if mode == 'spam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (category='Spam' OR category='spam') GROUP BY account_year, price", (country,)).fetchall()
+            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)='spam' GROUP BY account_year, price", (country,)).fetchall()
         elif mode == 'nonspam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (category!='Spam' AND category!='spam') GROUP BY account_year, price", (country,)).fetchall()
+            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL GROUP BY account_year, price", (country,)).fetchall()
         elif mode == 'no_2fa':
             rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') GROUP BY account_year, price", (country,)).fetchall()
         elif mode == 'with_2fa':
@@ -405,9 +405,9 @@ async def process_purchase(event, mode, country, year, price_str):
 
         # Check local stock first
         if mode == 'spam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (category='Spam' OR category='spam') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'nonspam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (category!='Spam' AND category!='spam') LIMIT 1", (country, int(year))).fetchone()
+            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'no_2fa':
             local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
         elif mode == 'with_2fa':
@@ -491,6 +491,16 @@ async def process_purchase(event, mode, country, year, price_str):
                 balance_id = itm.get('balance_id')
                 ok, buy_result = await lzt_client.fast_buy(item_id, price_str, balance_id)
                 if ok:
+                    # Post-purchase spam safety check
+                    bought_data = buy_result.get("item_data") or {}
+                    post_sb = bought_data.get("telegram_spam_block")
+                    if mode == 'nonspam' and post_sb is not None and post_sb != -1:
+                        logger.warning(f"Bought item {item_id} has spamblock {post_sb}, rejecting for nonspam mode...")
+                        continue
+                    if mode == 'spam' and post_sb == -1:
+                        logger.warning(f"Bought item {item_id} in spam mode is clean, rejecting for spam mode...")
+                        continue
+
                     str_sess = buy_result.get("string_session")
                     if str_sess:
                         try:

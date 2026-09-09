@@ -255,14 +255,23 @@ def set_lzt_margin(margin):
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('lzt_margin', ?)", (str(margin),))
     db.commit()
 
+def adjust_price_by_mode(base_val, mode):
+    if mode == 'spam':
+        # Spam accounts heavily discounted (cheap for channel joiners/members)
+        return max(int(base_val * 0.5), 12)
+    elif mode == 'nonspam':
+        # Non-spam / clean accounts priced higher for guaranteed 100% spam-free quality
+        return max(int(round(base_val * 1.25)), base_val + 8)
+    elif mode == 'premium':
+        return base_val + 150
+    return base_val
+
 def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     # 1. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
     row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
     if row and row[0] and row[0] > 0:
         base = int(row[0])
-        if mode == 'spam':
-            return max(int(base * 0.7), 15)
-        return base
+        return adjust_price_by_mode(base, mode)
     
     # 2. Get base country price (set with year='Common' or 'ALL')
     row_all = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
@@ -288,9 +297,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     if base_price is not None:
         add_amount = YEAR_ADDITIONS.get(y_int, 0 if y_int >= 2026 else (2026 - y_int) * 60)
         total = base_price + add_amount
-        if mode == 'spam':
-            return max(int(total * 0.7), 15)
-        return total
+        return adjust_price_by_mode(total, mode)
         
     # 3. Dynamic calculation from LZT RUB price if no base price is found
     rub_rate = get_rub_rate()
@@ -298,11 +305,7 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     inr_cost = lzt_price_rub * rub_rate
     calculated = round(inr_cost + margin)
     final_p = max(int(calculated), 25)
-    if mode == 'spam':
-        return max(int(final_p * 0.7), 15)
-    elif mode == 'premium':
-        return final_p + 150
-    return final_p
+    return adjust_price_by_mode(final_p, mode)
 
 def get_change_number_fee():
     res = cur.execute("SELECT value FROM settings WHERE key='change_number_fee'").fetchone()
