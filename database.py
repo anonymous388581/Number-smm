@@ -257,8 +257,8 @@ def set_lzt_margin(margin):
 
 def adjust_price_by_mode(base_val, mode):
     if mode == 'spam':
-        # Spam accounts heavily discounted (cheap for channel joiners/members)
-        return max(int(base_val * 0.5), 12)
+        # Spam accounts discounted (~45% off, cheap for channel joiners while keeping profit 100% safe)
+        return max(int(base_val * 0.55), 15)
     elif mode == 'nonspam':
         # Non-spam / clean accounts priced higher for guaranteed 100% spam-free quality
         return max(int(round(base_val * 1.25)), base_val + 8)
