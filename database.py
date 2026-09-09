@@ -39,6 +39,10 @@ def setup_db():
         price INTEGER,
         PRIMARY KEY (country, year)
     );
+    CREATE TABLE IF NOT EXISTS spamfree_prices (
+        country TEXT PRIMARY KEY,
+        price INTEGER
+    );
     CREATE TABLE IF NOT EXISTS deposits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -267,16 +271,6 @@ def adjust_price_by_mode(base_val, mode):
     return base_val
 
 def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
-    # 1. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
-    row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
-    if row and row[0] and row[0] > 0:
-        base = int(row[0])
-        return adjust_price_by_mode(base, mode)
-    
-    # 2. Get base country price (set with year='Common' or 'ALL')
-    row_all = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
-    base_price = int(row_all[0]) if (row_all and row_all[0] and row_all[0] > 0) else None
-
     # Aged year price additions (if no explicit year price is set)
     YEAR_ADDITIONS = {
         2026: 0,
@@ -294,12 +288,50 @@ def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
     try: y_int = int(year)
     except: y_int = 2026
 
+    add_amount = YEAR_ADDITIONS.get(y_int, 0 if y_int >= 2026 else (2026 - y_int) * 60)
+
+    # 1. SPAM-FREE (NON-SPAM) MODE:
+    # Uses the fresh VIP Spam-Free price list directly!
+    if mode == 'nonspam':
+        row = cur.execute("SELECT price FROM spamfree_prices WHERE country=?", (country,)).fetchone()
+        if row and row[0] and row[0] > 0:
+            return int(row[0]) + add_amount
+
+    # 2. SPAM / USED MODE:
+    # Retain the previous cheap pricing from base auto_prices table
+    if mode == 'spam':
+        row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
+        if not row:
+            row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
+        
+        if row and row[0] and row[0] > 0:
+            base = int(row[0])
+            total = base + add_amount
+            return max(int(total * 0.55), 15)
+        
+        # Dynamic fallback if no auto_price row
+        rub_rate = get_rub_rate()
+        margin = get_lzt_margin()
+        inr_cost = lzt_price_rub * rub_rate
+        calculated = round(inr_cost + margin)
+        final_p = max(int(calculated), 25)
+        return max(int(final_p * 0.55), 15)
+
+    # 3. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
+    row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
+    if row and row[0] and row[0] > 0:
+        base = int(row[0])
+        return adjust_price_by_mode(base, mode)
+    
+    # 4. Get base country price (set with year='Common' or 'ALL')
+    row_all = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
+    base_price = int(row_all[0]) if (row_all and row_all[0] and row_all[0] > 0) else None
+
     if base_price is not None:
-        add_amount = YEAR_ADDITIONS.get(y_int, 0 if y_int >= 2026 else (2026 - y_int) * 60)
         total = base_price + add_amount
         return adjust_price_by_mode(total, mode)
         
-    # 3. Dynamic calculation from LZT RUB price if no base price is found
+    # 5. Dynamic calculation from LZT RUB price if no base price is found
     rub_rate = get_rub_rate()
     margin = get_lzt_margin()
     inr_cost = lzt_price_rub * rub_rate
