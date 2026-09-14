@@ -164,8 +164,24 @@ def register_callbacks(bot):
         cur.execute("UPDATE users SET terms_accepted=1 WHERE user_id=?", (uid,))
         db.commit()
         await e.answer("✅ Terms Accepted!", alert=True)
-        await e.delete()
-        await send_main_menu(bot, e, uid)
+        try: await e.delete()
+        except: pass
+        try:
+            from utils.keyboards import get_persistent_menu
+            if is_admin(uid):
+                await bot.send_message(
+                    uid,
+                    "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
+                    buttons=get_persistent_menu(uid)
+                )
+            else:
+                await bot.send_message(
+                    uid,
+                    "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
+                    buttons=get_persistent_menu(uid)
+                )
+        except Exception: pass
+        await send_main_menu(bot, None, uid)
 
     @bot.on(events.CallbackQuery(pattern=b"^tc_reject$"))
     async def cb_tc_reject(e):
@@ -202,8 +218,24 @@ def register_callbacks(bot):
                 try: await e.edit(msg, buttons=get_terms_buttons())
                 except MessageNotModifiedError: pass
             else:
-                await e.delete()
-                await send_main_menu(bot, e, uid)
+                try: await e.delete()
+                except: pass
+                try:
+                    from utils.keyboards import get_persistent_menu
+                    if is_admin(uid):
+                        await bot.send_message(
+                            uid,
+                            "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
+                            buttons=get_persistent_menu(uid)
+                        )
+                    else:
+                        await bot.send_message(
+                            uid,
+                            "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
+                            buttons=get_persistent_menu(uid)
+                        )
+                except Exception: pass
+                await send_main_menu(bot, None, uid)
         else:
             # Show only unjoined channels
             remaining = len(unjoined)

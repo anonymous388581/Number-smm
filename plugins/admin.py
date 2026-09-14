@@ -72,4 +72,14 @@ async def admin_panel_handler(event):
 def register_admin(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^([/!]?admin|🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ|🔐 Admin Panel)$"))
     async def msg_admin(e):
+        uid = e.sender_id
+        if is_admin(uid):
+            try:
+                from utils.keyboards import get_persistent_menu
+                await bot.send_message(
+                    uid,
+                    "<blockquote>🔐 <b>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ</b>\n<i>𝐊ᴇʏʙᴏᴀʀᴅ sʜᴏʀᴛᴄᴜᴛs ᴀᴄᴛɪᴠᴇ.</i></blockquote>",
+                    buttons=get_persistent_menu(uid)
+                )
+            except Exception: pass
         await admin_panel_handler(e)

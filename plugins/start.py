@@ -118,6 +118,22 @@ def register_start(bot):
                 msg = f"<blockquote>{PE_FLOWER} <b>𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs</b></blockquote>\n<blockquote>𝐏ʟᴇᴀsᴇ ʀᴇᴀᴅ ᴀɴᴅ ᴀᴄᴄᴇᴘᴛ ᴏᴜʀ 𝐓ᴇʀᴍs & 𝐂ᴏɴᴅɪᴛɪᴏɴs ʙᴇғᴏʀᴇ ᴜsɪɴɢ ᴛʜᴇ ʙᴏᴛ.</blockquote>"
                 return await e.respond(msg, buttons=get_terms_buttons())
 
+            try:
+                if is_admin(uid):
+                    await bot.send_message(
+                        uid,
+                        "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
+                        buttons=get_persistent_menu(uid)
+                    )
+                else:
+                    await bot.send_message(
+                        uid,
+                        "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
+                        buttons=get_persistent_menu(uid)
+                    )
+            except Exception as k_err:
+                logger.warning(f"Could not send persistent menu: {k_err}")
+
             await send_main_menu(bot, e, uid)
         except Exception as ex: 
             logger.error(f"Start Error: {ex}", exc_info=True)
