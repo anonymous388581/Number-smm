@@ -827,16 +827,51 @@ async def admin_actions(event):
                 os.remove("temp_restore.csv")
                 await conv.send_message(f"{P_YES} Restored {count} users.")
 
-            elif action_data == "add_fsub" and has_perm(uid, 'p_settings'):
-                resp = await get_reply(f"📢 <b>Enter Channel ID / Username & Join URL:</b>\n\n<i>Format:</i> <code><channel_id> <join_url></code>\n<i>Example:</i>\n<code>-1003875933534 https://t.me/sivamXpruff</code>")
-                text = resp.text.strip()
-                parts = text.split()
-                if len(parts) >= 2:
-                    ch_id, join_url = parts[0], parts[1]
-                    add_fsub_channel(ch_id, join_url)
-                    await conv.send_message(f"{P_YES} <b>Must-Join Channel Added!</b>\n• Channel: <code>{ch_id}</code>\n• Link: {join_url}")
+            elif action_data == "add_fsub" and (is_super_admin(uid) or has_perm(uid, 'p_settings')):
+                prompt_msg = (
+                    "📢 <b>Add Must-Join (Force Sub) Channel:</b>\n\n"
+                    "Aap channel ka <b>koi bhi format</b> bhej sakte hain:\n"
+                    "• <b>Username:</b> <code>@mychannel</code> ya <code>mychannel</code>\n"
+                    "• <b>Public Link:</b> <code>https://t.me/mychannel</code>\n"
+                    "• <b>Private Link:</b> <code>https://t.me/+invitehash</code>\n"
+                    "• <b>Channel ID:</b> <code>-1001234567890</code>\n"
+                    "• <b>Forward:</b> Channel se koi bhi message yahan forward karein!\n\n"
+                    "<i>(Make sure bot is an Admin in the channel)</i>\n"
+                    "<i>Type /cancel to abort.</i>"
+                )
+                resp = await get_reply(prompt_msg)
+                resp_text = (resp.text or "").strip()
+                if resp_text.lower() in ('/cancel', 'cancel'):
+                    await conv.send_message("❌ Action cancelled.")
                 else:
-                    await conv.send_message(f"{P_NO} Invalid format. Provide both Channel ID and Join URL separated by space.")
+                    from utils.helpers import resolve_channel_and_link
+                    res = await resolve_channel_and_link(bot, text=resp_text, forward_msg=resp)
+                    if not res.get('success'):
+                        await conv.send_message(f"{P_NO} {res.get('error')}")
+                    else:
+                        ch_id = res['channel_id']
+                        join_url = res['join_url']
+                        title = res['title']
+                        is_bot_adm = res['is_admin']
+                        
+                        add_fsub_channel(ch_id, join_url)
+                        
+                        if is_bot_adm:
+                            status_badge = "🟢 <b>Bot Admin Verified!</b>"
+                        else:
+                            status_badge = (
+                                "⚠️ <b>Bot is NOT an Admin!</b>\n"
+                                "<i>(Channel me bot ko Admin banayein with 'Invite Users' permission taaki users verify ho sakein.)</i>"
+                            )
+                        
+                        success_msg = (
+                            f"{P_YES} <b>Must-Join Channel Added Successfully!</b>\n\n"
+                            f"📌 <b>Title:</b> <b>{html.escape(str(title))}</b>\n"
+                            f"🆔 <b>Channel:</b> <code>{ch_id}</code>\n"
+                            f"🔗 <b>Join Link:</b> {join_url}\n"
+                            f"🛡️ <b>Status:</b> {status_badge}"
+                        )
+                        await conv.send_message(success_msg)
 
             elif action_data == "add_logch" and has_perm(uid, 'p_settings'):
                 resp = await get_reply(f"📝 <b>Enter Log / Approval Channel ID:</b>\n\n<i>Example:</i> <code>-1003875933534</code>\n<i>(Make sure the bot is an Admin with post permissions in the channel!)</i>")

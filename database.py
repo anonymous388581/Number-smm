@@ -376,26 +376,40 @@ def get_fsub_channels():
     return [c.strip() for c in raw.split(",") if c.strip()]
 
 def get_fsub_urls():
+    from utils.helpers import format_join_url
     res = cur.execute("SELECT value FROM settings WHERE key='fsub_urls'").fetchone()
     if res and res[0] is not None:
         val = res[0].strip()
         if not val: return []
-        return [u.strip() for u in val.split(",") if u.strip()]
+        return [format_join_url(u) for u in val.split(",") if u.strip()]
     raw = os.getenv("JOIN_URLS", "")
-    return [u.strip() for u in raw.split(",") if u.strip()]
+    return [format_join_url(u) for u in raw.split(",") if u.strip()]
 
 def set_fsub_data(channels_list, urls_list):
+    from utils.helpers import format_join_url
     ch_str = ",".join([str(c).strip() for c in channels_list if str(c).strip()])
-    url_str = ",".join([str(u).strip() for u in urls_list if str(u).strip()])
+    url_str = ",".join([format_join_url(u) for u in urls_list if format_join_url(u)])
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fsub_channels', ?)", (ch_str,))
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fsub_urls', ?)", (url_str,))
     db.commit()
 
 def add_fsub_channel(channel_id, join_url):
+    from utils.helpers import format_join_url
     chs = get_fsub_channels()
     urls = get_fsub_urls()
-    chs.append(str(channel_id).strip())
-    urls.append(str(join_url).strip())
+    ch_str = str(channel_id).strip()
+    norm_url = format_join_url(join_url)
+    
+    if ch_str in chs:
+        idx = chs.index(ch_str)
+        if idx < len(urls):
+            urls[idx] = norm_url
+        else:
+            urls.append(norm_url)
+    else:
+        chs.append(ch_str)
+        urls.append(norm_url)
+        
     set_fsub_data(chs, urls)
 
 def remove_fsub_channel(index):
