@@ -60,6 +60,7 @@ async def admin_panel_handler(event):
         btns.append([style_btn(f"🔄 Change Num Fee: ₹{chg_fee}", "adm_setchangefee", "success", icon=5409320020058584473), style_btn("Set USDT Rate", "adm_usdtrate", "primary", icon=5409098988156629257)])
         btns.append([style_btn("Payments", "adm_payments", "primary", icon=5409098988156629257), style_btn("Manage Admins", "adm_manageadmins", "primary", icon=5409098988156629257)])
         btns.append([style_btn("𝐁ᴀᴄᴋup Users", "adm_backupusr", "primary", icon=5409098988156629257), style_btn("Restore Users", "adm_restoreusr", "primary", icon=5409098988156629257)])
+        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴀɪɴ 𝐌ᴇɴᴜ", b"dashboard_main", "danger", icon=6129812419028982717)])
 
     header = (f"<blockquote>{PE_CROWN} <b>𝐀ᴅᴠᴀɴᴄᴇᴅ 𝐀ᴅᴍɪɴ 𝐃ᴀsʜʙᴏᴀʀᴅ</b>\n\n"
               f"⚡ <b>𝐌ᴏᴅᴇ:</b> {mode_text}\n"
@@ -72,14 +73,4 @@ async def admin_panel_handler(event):
 def register_admin(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^([/!]?admin|🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ|🔐 Admin Panel)$"))
     async def msg_admin(e):
-        uid = e.sender_id
-        if is_admin(uid):
-            try:
-                from utils.keyboards import get_persistent_menu
-                await bot.send_message(
-                    uid,
-                    "<blockquote>🔐 <b>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ</b>\n<i>𝐊ᴇʏʙᴏᴀʀᴅ sʜᴏʀᴛᴄᴜᴛs ᴀᴄᴛɪᴠᴇ.</i></blockquote>",
-                    buttons=get_persistent_menu(uid)
-                )
-            except Exception: pass
         await admin_panel_handler(e)

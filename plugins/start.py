@@ -137,3 +137,14 @@ def register_start(bot):
             await send_main_menu(bot, e, uid)
         except Exception as ex: 
             logger.error(f"Start Error: {ex}", exc_info=True)
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^(🔻 𝐂ʟᴏsᴇ|❌ 𝐇ɪᴅᴇ|/hide|/close)$"))
+    async def handle_close_keyboard(e):
+        await e.respond("🔽 <i>Keyboard closed. Tap /menu or /start anytime to reopen.</i>", buttons=Button.clear())
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/menu$"))
+    async def handle_menu_cmd(e):
+        uid = e.sender_id
+        if not uid: return
+        await e.respond("✨ <i>Menu shortcuts opened below 👇</i>", buttons=get_persistent_menu(uid))
+
