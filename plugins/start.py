@@ -104,9 +104,13 @@ def register_start(bot):
                     buttons.append([Button.url(btn_label, url)])
                 buttons.append([style_btn("𝐕ᴇʀɪғʏ 𝐉ᴏɪɴᴇᴅ", b"verify_join", "success", icon=6129627894349045589)])
                 
-                f = await bot.upload_file(PFP_URL)
-                media = types.InputMediaUploadedPhoto(file=f, spoiler=True)
-                return await bot.send_file(e.chat_id, media, caption=msg, buttons=buttons)
+                try:
+                    f = await bot.upload_file(PFP_URL)
+                    media = types.InputMediaUploadedPhoto(file=f, spoiler=True)
+                    return await bot.send_file(e.chat_id, media, caption=msg, buttons=buttons)
+                except Exception as up_err:
+                    logger.warning(f"Could not send photo banner: {up_err}, falling back to text")
+                    return await e.respond(msg, buttons=buttons)
 
             row = cur.execute("SELECT terms_accepted FROM users WHERE user_id=?", (uid,)).fetchone()
             terms_acc = row[0] if row else 0
@@ -116,4 +120,4 @@ def register_start(bot):
 
             await send_main_menu(bot, e, uid)
         except Exception as ex: 
-            print(f"Start Error: {ex}")
+            logger.error(f"Start Error: {ex}", exc_info=True)

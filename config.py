@@ -17,7 +17,10 @@ def load_env_file(path=".env"):
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, value = line.split("=", 1)
-                os.environ[key.strip()] = value.strip().strip('"').strip("'")
+                k = key.strip()
+                v = value.strip().strip('"').strip("'")
+                if k not in os.environ:
+                    os.environ[k] = v
     except Exception as ex:
         print(f"Failed to load {path}: {ex}")
 
@@ -28,9 +31,29 @@ def env_int(name, default=0):
     if raw is None or str(raw).strip() == "": return default
     return int(str(raw).strip())
 
-def env_list(name, default_csv):
+def format_join_url(url: str) -> str:
+    """Normalizes any Telegram link or username into a valid https://t.me/... URL."""
+    if not url:
+        return ""
+    url = str(url).strip()
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("t.me/") or url.startswith("telegram.me/"):
+        return f"https://{url}"
+    if url.startswith("@"):
+        return f"https://t.me/{url[1:]}"
+    if not (url.startswith("-") or url.isdigit()):
+        return f"https://t.me/{url}"
+    return url
+
+def env_list(name, default_csv=""):
     raw = os.getenv(name, default_csv)
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    if not raw: return []
+    import re
+    items = [item.strip() for item in re.split(r'[\s,]+', raw) if item.strip()]
+    if name == "JOIN_URLS":
+        return [format_join_url(item) for item in items if item]
+    return items
 
 API_ID = env_int("API_ID", 0)
 API_HASH = os.getenv("API_HASH", "")

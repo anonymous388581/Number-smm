@@ -24,7 +24,7 @@ async def main():
         try:
             if not bot.is_connected():
                 await bot.connect()
-            print("✅ Numbott Modular (Telethon) STARTED SUCCESSFULLY")
+            print("✅ Numbott Modular (Telethon) STARTED SUCCESSFULLY", flush=True)
             await bot.run_until_disconnected()
         except Exception as err:
             logger.error(f"⚠️ Numbott disconnected: {err}. Reconnecting in 5s...")
@@ -38,6 +38,10 @@ if __name__ == '__main__':
     @bot.on(events.CallbackQuery)
     async def debug_cb(e):
         logger.warning(f"CALLBACK DATA: {e.data}")
+
+    @bot.on(events.NewMessage)
+    async def debug_msg(e):
+        logger.info(f"📩 INCOMING MSG from {e.sender_id}: {e.text}")
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
