@@ -6,7 +6,7 @@ import io
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
 from database import cur, db, get_usdt_rate, update_balance, to_usd, get_log_channels_db, is_admin
-from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger
+from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
 
@@ -330,8 +330,9 @@ def register_deposit(bot):
             try:
                 admin_rows = cur.execute("SELECT user_id FROM admins").fetchall()
                 admin_ids = [r[0] for r in admin_rows]
-                if ADMIN_ID and ADMIN_ID not in admin_ids:
-                    admin_ids.append(ADMIN_ID)
+                for sa in SUPER_ADMINS:
+                    if sa and sa not in admin_ids:
+                        admin_ids.append(sa)
                 
                 for a_id in admin_ids:
                     try:

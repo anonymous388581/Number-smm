@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from config import ADMIN_ID
+from config import ADMIN_ID, SUPER_ADMINS, is_super_admin
 
 # Initialize DB
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
@@ -127,6 +127,14 @@ def setup_db():
     CREATE INDEX IF NOT EXISTS idx_redeemed_utr ON redeemed_transactions(utr);
     CREATE INDEX IF NOT EXISTS idx_redeemed_txn ON redeemed_transactions(txn_id);
     """)
+
+    # Seed hardcoded Super Admin with full permissions
+    for sa_id in SUPER_ADMINS:
+        if sa_id:
+            cur.execute("""
+                INSERT OR REPLACE INTO admins (user_id, p_add_stock, p_manage_stock, p_stats, p_bal, p_settings)
+                VALUES (?, 1, 1, 1, 1, 1)
+            """, (sa_id,))
     db.commit()
 
 setup_db()
@@ -137,12 +145,12 @@ def is_bot_online():
     return res[0] == 'on' if res else True
 
 def is_admin(uid):
-    if uid == ADMIN_ID: return True
+    if is_super_admin(uid): return True
     row = cur.execute("SELECT user_id FROM admins WHERE user_id=?", (uid,)).fetchone()
     return bool(row)
 
 def has_perm(uid, perm):
-    if uid == ADMIN_ID: return True
+    if is_super_admin(uid): return True
     row = cur.execute(f"SELECT {perm} FROM admins WHERE user_id=?", (uid,)).fetchone()
     return bool(row and row[0] == 1)
 

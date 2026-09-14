@@ -413,17 +413,21 @@ async def admin_actions(event):
         ]
         return await event.edit(f"{P_CARD} <b>Manage Payment Methods</b>", buttons=btns)
 
-    elif action_data == "manageadmins" and uid == ADMIN_ID:
+    elif action_data == "manageadmins" and is_super_admin(uid):
         return await manage_admins_menu(event)
 
-    elif action_data.startswith("tglperm|") and uid == ADMIN_ID:
+    elif action_data.startswith("tglperm|") and is_super_admin(uid):
         _, t_id, p_name = action_data.split("|")
+        if int(t_id) == 6356015122:
+            return await event.answer("⚠️ Super Admin permissions cannot be modified!", alert=True)
         cur.execute(f"UPDATE admins SET {p_name} = CASE WHEN {p_name}=1 THEN 0 ELSE 1 END WHERE user_id=?", (t_id,))
         db.commit()
         return await edit_admin_menu(event, t_id)
         
-    elif action_data.startswith("deladmin|") and uid == ADMIN_ID:
+    elif action_data.startswith("deladmin|") and is_super_admin(uid):
         t_id = action_data.split("|")[1]
+        if int(t_id) == 6356015122:
+            return await event.answer("⚠️ Super Admin cannot be removed!", alert=True)
         cur.execute("DELETE FROM admins WHERE user_id=?", (t_id,))
         db.commit()
         await event.answer("✅ Admin Removed", alert=True)
@@ -489,7 +493,7 @@ async def admin_actions(event):
                        f"{P_OFF} Banned: {'Yes' if is_banned else 'No'}")
                 await conv.send_message(msg)
 
-            elif action_data == "addadmin" and uid == ADMIN_ID:
+            elif action_data == "addadmin" and is_super_admin(uid):
                 new_ad = int((await get_reply(f"{P_ACC} <b>Enter User ID for new Admin:</b>")).text)
                 cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (new_ad,))
                 db.commit()
@@ -499,7 +503,7 @@ async def admin_actions(event):
                     async def answer(self, txt, alert): pass
                 await edit_admin_menu(FakeEvent(), new_ad)
                 
-            elif action_data == "editadminreq" and uid == ADMIN_ID:
+            elif action_data == "editadminreq" and is_super_admin(uid):
                 t_id = int((await get_reply(f"{P_ACC} <b>Enter User ID to edit:</b>")).text)
                 class FakeEvent: 
                     async def edit(self, text, buttons): await bot.send_message(chat, text, buttons=buttons)

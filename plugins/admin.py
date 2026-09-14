@@ -8,7 +8,7 @@ from telethon import events, Button, TelegramClient
 from telethon.tl.functions.account import GetPasswordRequest
 from telethon.errors import SessionPasswordNeededError
 from database import cur, db, is_bot_online, is_admin, has_perm, ADMIN_ID, get_flag_by_country_name, get_country_info, update_balance, get_bot_mode, get_change_number_fee
-from config import PE_CROWN, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot
+from config import PE_CROWN, PE_LOCATION, PE_LIGHTNING, P_USERS, P_PKG, P_WAIT, P_ON, P_YES, P_NO, P_WARN, P_DOC, P_FLAG, P_MONEY, P_PHONE, P_GLOBE, P_2FA, P_CAL, P_OTP, P_CARD, P_TG, P_ACC, P_USDT, P_UPI, P_CART, P_GIFT, P_STATS, P_OFF, API_ID, API_HASH, bot, is_super_admin
 from utils.keyboards import style_btn
 
 async def admin_panel_handler(event):
@@ -24,35 +24,35 @@ async def admin_panel_handler(event):
     chg_fee = get_change_number_fee()
     btns = []
     
-    if uid == ADMIN_ID or has_perm(uid, 'p_settings'):
+    if is_super_admin(uid) or has_perm(uid, 'p_settings'):
         btns.append([
             style_btn(f"Status: {status_text}", "adm_togglebot", "primary", icon=5409098988156629257),
             style_btn(f"Mode: {mode_text}", "adm_toggle_mode", "success", icon=5409271925014801629)
         ])
         
     r1 = []
-    if uid == ADMIN_ID or has_perm(uid, 'p_add_stock'):
+    if is_super_admin(uid) or has_perm(uid, 'p_add_stock'):
         r1.extend([style_btn("Add Single Acc", "adm_addstock", "primary", icon=6129732880529628243), style_btn("Add ZIP", "adm_addzip", "primary", icon=5355292788923593967)])
     if r1: btns.append(r1)
 
     r2 = []
-    if uid == ADMIN_ID or has_perm(uid, 'p_manage_stock'):
+    if is_super_admin(uid) or has_perm(uid, 'p_manage_stock'):
         r2.extend([style_btn("Manage Stock", "adm_managestock", "success", icon=6129731974291527294), style_btn("Check Stock", "adm_checkstock", "primary", icon=5409098988156629257), style_btn("Auto Price", "adm_autoprice", "primary", icon=5409098988156629257)])
     if r2: btns.append(r2)
 
     r3 = []
-    if uid == ADMIN_ID or has_perm(uid, 'p_stats'):
+    if is_super_admin(uid) or has_perm(uid, 'p_stats'):
         r3.extend([style_btn("Statistics", "adm_stats", "primary", icon=5409098988156629257), style_btn("Broadcast", "adm_bcast", "primary", icon=5409098988156629257)])
         r3.append(style_btn("User Info", "adm_userinfo", "primary", icon=5409098988156629257))
     if r3: btns.append(r3)
 
     r4 = []
-    if uid == ADMIN_ID or has_perm(uid, 'p_bal'):
+    if is_super_admin(uid) or has_perm(uid, 'p_bal'):
         r4.extend([style_btn("Change Balance", "adm_bal", "primary", icon=6129888444245089008), style_btn("Ban User", "adm_ban", "danger", icon=5408832111773757273)])
     if r4: btns.append(r4)
 
     r5 = []
-    if uid == ADMIN_ID or has_perm(uid, 'p_settings'):
+    if is_super_admin(uid) or has_perm(uid, 'p_settings'):
         r5.extend([style_btn("Discount", "adm_discount", "primary", icon=5409098988156629257), style_btn("Ref %", "adm_refpct", "primary", icon=5409098988156629257)])
         btns.append(r5)
         btns.append([style_btn("📢 Channels & FSub", "adm_channels_mgr", "success", icon=6129627894349045589), style_btn("Support URL", "adm_supporturl", "primary", icon=5409098988156629257)])
