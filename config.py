@@ -82,7 +82,7 @@ CHECK_CHANNELS = env_list("CHECK_CHANNELS", "")
 JOIN_URLS = env_list("JOIN_URLS", "")
 
 # LINKS & MEDIA
-TERMS_URL = os.getenv("TERMS_URL", "")
+TERMS_URL = os.getenv("TERMS_URL", "").strip() or "https://t.me/sivamXpruff"
 CWALLET_QR = os.getenv("CWALLET_QR", "")
 CWALLET_ID = os.getenv("CWALLET_ID", "")
 

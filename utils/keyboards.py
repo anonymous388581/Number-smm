@@ -14,8 +14,9 @@ def style_url(text, url, style_type=None, icon=None):
 
 
 def get_terms_buttons():
+    t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else "https://t.me/sivamXpruff"
     return [
-        [Button.url("📜 Read Terms & Conditions", TERMS_URL)],
+        [Button.url("📜 Read Terms & Conditions", t_url)],
         [style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142), 
          style_btn("𝐑ᴇᴊᴇᴄᴛ", b"tc_reject", style_type='danger', icon=5354889508674360491)]
     ]
@@ -42,9 +43,11 @@ def get_persistent_menu(uid):
 
 def get_support_buttons():
     urls = get_fsub_urls()
+    sup_url = get_support_url()
+    t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else sup_url
     buttons = [
-        [Button.url("📩 Support", get_support_url())],
-        [Button.url("📜 Terms & Conditions", TERMS_URL)]
+        [Button.url("📩 Support", sup_url)],
+        [Button.url("📜 Terms & Conditions", t_url)]
     ]
     if urls:
         buttons.append([Button.url("📢 Channel", urls[0])])

@@ -102,7 +102,7 @@ async def show_more_menu(event):
     btns = [
         [style_btn("🎁 Refer & Earn", b"view_referrals", "success", icon=5354889508674360491)],
         [style_btn("📊 Live Stock", b"stk_pg|1", "primary", icon=6129627894349045589)],
-        [Button.url("📜 Terms & Conditions", TERMS_URL)],
+        [Button.url("📜 Terms & Conditions", TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else get_support_url())],
         [Button.url("📩 Support", get_support_url())],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
