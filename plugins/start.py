@@ -7,6 +7,40 @@ from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_t
 from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, JOIN_URLS, TERMS_URL, logger
 from utils.states import session_buy_state, deposit_input
 
+async def send_start_sticker_or_menu(bot, uid):
+    import os
+    import json
+    from utils.keyboards import get_persistent_menu
+    
+    # 1. Check if custom sticker is saved in database
+    row = cur.execute("SELECT value FROM settings WHERE key='start_sticker'").fetchone()
+    if row and row[0]:
+        try:
+            d = json.loads(row[0])
+            doc = types.InputDocument(
+                id=int(d['id']),
+                access_hash=int(d['access_hash']),
+                file_reference=bytes.fromhex(d['file_reference'])
+            )
+            return await bot.send_file(uid, doc, buttons=get_persistent_menu(uid))
+        except Exception as ex:
+            logger.warning(f"Failed to send saved sticker doc: {ex}")
+
+    # 2. Check if local sticker asset exists
+    for ext in ['.webp', '.tgs', '.webm']:
+        local_p = f"assets/start_sticker{ext}"
+        if os.path.exists(local_p):
+            try:
+                return await bot.send_file(uid, local_p, buttons=get_persistent_menu(uid))
+            except Exception as ex:
+                logger.warning(f"Failed to send local sticker {local_p}: {ex}")
+
+    # 3. Fallback: send clean minimal emoji greeting with keyboard
+    try:
+        return await bot.send_message(uid, "👋", buttons=get_persistent_menu(uid))
+    except Exception as ex:
+        logger.warning(f"Fallback keyboard send failed: {ex}")
+
 async def send_main_menu(bot, event, uid):
     me = await bot.get_me()
     bot_name = me.first_name or "Store Bot"
@@ -119,20 +153,9 @@ def register_start(bot):
                 return await e.respond(msg, buttons=get_terms_buttons())
 
             try:
-                if is_admin(uid):
-                    await bot.send_message(
-                        uid,
-                        "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
-                        buttons=get_persistent_menu(uid)
-                    )
-                else:
-                    await bot.send_message(
-                        uid,
-                        "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
-                        buttons=get_persistent_menu(uid)
-                    )
+                await send_start_sticker_or_menu(bot, uid)
             except Exception as k_err:
-                logger.warning(f"Could not send persistent menu: {k_err}")
+                logger.warning(f"Could not send start sticker: {k_err}")
 
             await send_main_menu(bot, e, uid)
         except Exception as ex: 
@@ -147,4 +170,34 @@ def register_start(bot):
         uid = e.sender_id
         if not uid: return
         await e.respond("✨ <i>Menu shortcuts opened below 👇</i>", buttons=get_persistent_menu(uid))
+
+    @bot.on(events.NewMessage(pattern=r"(?i)^/setsticker$"))
+    async def cmd_set_sticker(e):
+        if not is_admin(e.sender_id): return
+        await e.reply("🎨 <b>Send or forward any Sticker now!</b>\n<i>The bot will automatically save it as the official /start Welcome Sticker.</i>")
+
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and e.sticker and is_admin(e.sender_id)))
+    async def on_admin_sticker_received(e):
+        try:
+            doc = e.media.document
+            import json
+            data = json.dumps({
+                'id': doc.id,
+                'access_hash': doc.access_hash,
+                'file_reference': doc.file_reference.hex()
+            })
+            cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('start_sticker', ?)", (data,))
+            db.commit()
+            
+            # Download locally as backup
+            try:
+                ext = '.tgs' if 'tgsticker' in (doc.mime_type or '') else ('.webm' if 'video' in (doc.mime_type or '') else '.webp')
+                await e.download_media(file=f"assets/start_sticker{ext}")
+            except Exception as d_err:
+                logger.warning(f"Could not download sticker locally: {d_err}")
+                
+            await e.reply("✅ <b>Start Welcome Sticker Updated Successfully!</b>\n\n<i>This sticker will now appear automatically on /start with the bottom reply keyboard.</i>")
+        except Exception as ex:
+            logger.error(f"Save sticker error: {ex}", exc_info=True)
+            await e.reply("❌ Failed to save sticker.")
 

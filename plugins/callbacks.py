@@ -167,19 +167,8 @@ def register_callbacks(bot):
         try: await e.delete()
         except: pass
         try:
-            from utils.keyboards import get_persistent_menu
-            if is_admin(uid):
-                await bot.send_message(
-                    uid,
-                    "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
-                    buttons=get_persistent_menu(uid)
-                )
-            else:
-                await bot.send_message(
-                    uid,
-                    "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
-                    buttons=get_persistent_menu(uid)
-                )
+            from plugins.start import send_start_sticker_or_menu
+            await send_start_sticker_or_menu(bot, uid)
         except Exception: pass
         await send_main_menu(bot, None, uid)
 
@@ -221,19 +210,8 @@ def register_callbacks(bot):
                 try: await e.delete()
                 except: pass
                 try:
-                    from utils.keyboards import get_persistent_menu
-                    if is_admin(uid):
-                        await bot.send_message(
-                            uid,
-                            "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n🔐 <i>𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ ʙᴜᴛᴛᴏɴ ɪs ᴀᴠᴀɪʟᴀʙʟᴇ ᴏɴ ʏᴏᴜʀ ᴋᴇʏʙᴏᴀʀᴅ ʙᴇʟᴏᴡ.</i></blockquote>",
-                            buttons=get_persistent_menu(uid)
-                        )
-                    else:
-                        await bot.send_message(
-                            uid,
-                            "<blockquote>✨ <b>𝐐ᴜɪᴄᴋ 𝐀ᴄᴄᴇss 𝐌ᴇɴᴜ 𝐀ᴄᴛɪᴠᴀᴛᴇᴅ</b>\n<i>𝐔sᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ғᴀsᴛ ɴᴀᴠɪɢᴀᴛɪᴏɴ.</i></blockquote>",
-                            buttons=get_persistent_menu(uid)
-                        )
+                    from plugins.start import send_start_sticker_or_menu
+                    await send_start_sticker_or_menu(bot, uid)
                 except Exception: pass
                 await send_main_menu(bot, None, uid)
         else:
