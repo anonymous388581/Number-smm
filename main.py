@@ -12,7 +12,14 @@ os.makedirs("sessions", exist_ok=True)
 # Import plugins AFTER bot is created so they can use it or register handlers
 from plugins import register_all_handlers
 
+from utils.health import start_health_server
+
 async def main():
+    try:
+        await start_health_server()
+    except Exception as e:
+        logger.error(f"⚠️ Health server startup failed: {e}")
+
     while True:
         try:
             if not bot.is_connected():

@@ -1,10 +1,11 @@
 services:
-  - type: worker
+  - type: web
     name: numbott-telethon
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     autoDeploy: false
+    healthCheckPath: /health
     envVars:
       - key: API_ID
         sync: false
