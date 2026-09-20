@@ -1,6 +1,9 @@
+import logging
 import sqlite3
 import os
 from config import ADMIN_ID, SUPER_ADMINS, is_super_admin
+
+logger = logging.getLogger(__name__)
 
 # Initialize DB
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
@@ -154,9 +157,10 @@ def has_perm(uid, perm):
     row = cur.execute(f"SELECT {perm} FROM admins WHERE user_id=?", (uid,)).fetchone()
     return bool(row and row[0] == 1)
 
-def ensure_user(uid):
+def ensure_user(uid, commit=True):
     cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (uid,))
-    db.commit()
+    if commit:
+        db.commit()
 
 def get_usdt_rate():
     res = cur.execute("SELECT value FROM settings WHERE key='usdt_rate'").fetchone()
@@ -179,6 +183,90 @@ def is_user_banned(uid):
 def update_balance(uid, amount):
     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, uid))
     db.commit()
+
+def approve_deposit(deposit_id, amount):
+    """Credit a pending deposit and mark it approved atomically."""
+    user_id = None
+    try:
+        deposit = cur.execute(
+            "SELECT user_id, status, amount FROM deposits WHERE id=?", (deposit_id,)
+        ).fetchone()
+        if not deposit:
+            raise ValueError(f"deposit {deposit_id} does not exist")
+
+        user_id, status, stored_amount = deposit
+        if status != "pending":
+            return {
+                "approved": False,
+                "already_processed": True,
+                "user_id": user_id,
+                "amount": stored_amount,
+            }
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError(f"invalid user ID {user_id!r}")
+
+        ensure_user(user_id, commit=False)
+        previous = cur.execute(
+            "SELECT balance FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        if not previous:
+            raise ValueError(f"user {user_id} could not be created or found")
+        logger.info(
+            "Manual deposit approval before credit: deposit_id=%s user_id=%s amount=%s current_balance=%s",
+            deposit_id, user_id, amount, previous[0],
+        )
+
+        updated = cur.execute(
+            "UPDATE users SET balance = balance + ? WHERE user_id=?",
+            (amount, user_id),
+        )
+        if updated.rowcount != 1:
+            raise RuntimeError(
+                f"balance update affected {updated.rowcount} rows for user {user_id}"
+            )
+
+        current = cur.execute(
+            "SELECT balance FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        expected = previous[0] + amount
+        if not current or current[0] != expected:
+            raise RuntimeError(
+                f"balance verification failed for user {user_id}: "
+                f"expected {expected}, got {current[0] if current else None}"
+            )
+
+        marked = cur.execute(
+            "UPDATE deposits SET status='approved', amount=? "
+            "WHERE id=? AND status='pending'",
+            (amount, deposit_id),
+        )
+        if marked.rowcount != 1:
+            raise RuntimeError(f"deposit {deposit_id} status update affected {marked.rowcount} rows")
+
+        total_updated = cur.execute(
+            "UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?",
+            (amount, user_id),
+        )
+        if total_updated.rowcount != 1:
+            raise RuntimeError(f"total deposited update failed for user {user_id}")
+
+        db.commit()
+        return {
+            "approved": True,
+            "already_processed": False,
+            "user_id": user_id,
+            "previous_balance": previous[0],
+            "balance": current[0],
+            "amount": amount,
+            "status": "approved",
+        }
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "Deposit approval failed: deposit_id=%s user_id=%s amount=%s error=%s",
+            deposit_id, user_id, amount, exc, exc_info=True,
+        )
+        raise
 
 COUNTRY_CODES = {
     '1': ('USA/Canada', '🇺🇸'), '7': ('Russia', '🇷🇺'), '20': ('Egypt', '🇪🇬'),

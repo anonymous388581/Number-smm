@@ -5,7 +5,7 @@ import urllib.parse
 import io
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_usdt_rate, update_balance, to_usd, get_log_channels_db, is_admin
+from database import cur, db, get_usdt_rate, update_balance, approve_deposit, to_usd, get_log_channels_db, is_admin
 from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
@@ -355,38 +355,46 @@ def register_deposit(bot):
         p = e.data.decode().split("|")
         dep_id, t_uid, method, a_type = p[1], int(p[2]), p[3], p[4]
         
-        row = cur.execute("SELECT status, amount FROM deposits WHERE id=?", (dep_id,)).fetchone()
-        if not row or row[0] != 'pending': 
+        row = cur.execute("SELECT user_id, status, amount FROM deposits WHERE id=?", (dep_id,)).fetchone()
+        if not row or row[1] != 'pending': 
             return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
+        deposit_uid = int(row[0]) if row[0] is not None else 0
+        logger.info("Manual deposit approval: deposit_id=%s user_id=%s amount=%s", dep_id, deposit_uid, row[2])
         
         if a_type == "exact":
             amt = int(p[5]) 
-            async with get_user_lock(t_uid):
-                prev_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (t_uid,)).fetchone()
-                prev_bal = prev_row[0] if prev_row else 0
-                update_balance(t_uid, amt)
-                
-                cur.execute("UPDATE deposits SET status='approved', amount=? WHERE id=?", (amt, dep_id))
-                cur.execute("UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?", (amt, t_uid))
-                db.commit()
+            async with get_user_lock(deposit_uid):
+                try:
+                    approval = approve_deposit(dep_id, amt)
+                except Exception:
+                    return await e.answer("❌ Deposit approval failed. No balance was credited.", alert=True)
+            if approval.get("already_processed"):
+                return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
+            credited_uid = approval["user_id"]
+            prev_bal = approval["previous_balance"]
+            new_bal = approval["balance"]
+            logger.info(
+                "Manual deposit approved: deposit_id=%s user_id=%s balance=%s status=%s",
+                dep_id, credited_uid, new_bal, approval["status"],
+            )
             
-            await process_referral_bonus(t_uid, amt)
+            await process_referral_bonus(credited_uid, amt)
             
             user_msg = (f"<blockquote>{PE_CHECK} <b>🎉 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n"
                         f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐀ᴅᴅᴇᴅ:</b> <b>{P_INR}{amt}</b> (${to_usd(amt):.2f})\n"
                         f"📉 <b>𝐏ʀᴇᴠɪᴏᴜs 𝐁ᴀʟᴀɴᴄᴇ:</b> {P_INR}{prev_bal}\n"
-                        f"📈 <b>𝐍ᴇᴡ 𝐁ᴀʟᴀɴᴄᴇ:</b> <b>{P_INR}{prev_bal+amt}</b> (${to_usd(prev_bal+amt):.2f})</blockquote>")
-            try: await bot.send_message(int(t_uid), user_msg)
+                        f"📈 <b>𝐍ᴇᴡ 𝐁ᴀʟᴀɴᴄᴇ:</b> <b>{P_INR}{new_bal}</b> (${to_usd(new_bal):.2f})</blockquote>")
+            try: await bot.send_message(int(credited_uid), user_msg)
             except: pass
             
             approved_text = (f"<blockquote>{PE_CHECK} <b>✅ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n"
-                             f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"
+                             f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{credited_uid}</code>\n"
                              f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐂ʀᴇᴅɪᴛᴇᴅ:</b> <b>{P_INR}{amt}</b>\n"
                              f"{P_CARD} <b>𝐌ᴇᴛʜᴏᴅ:</b> <code>{method}</code>\n"
                              f"👨‍💻 <b>𝐀ᴘᴘʀᴏᴠᴇᴅ 𝐁ʏ:</b> <code>{admin_uid}</code></blockquote>")
             try: await e.edit(approved_text)
             except MessageNotModifiedError: pass
-            await e.answer(f"✅ Approved! ₹{amt} credited to user {t_uid}.", alert=True)
+            await e.answer(f"✅ Approved! ₹{amt} credited to user {credited_uid}.", alert=True)
             
         elif a_type == "custom":
             custom_dep_amt[int(dep_id)] = "0"
@@ -452,24 +460,31 @@ def register_deposit(bot):
             amt = int(curr)
             if amt <= 0: return await e.answer("Amount must be > 0", alert=True)
             
-            async with get_user_lock(t_uid):
-                prev_row = cur.execute("SELECT balance FROM users WHERE user_id=?", (t_uid,)).fetchone()
-                prev_bal = prev_row[0] if prev_row else 0
-                update_balance(t_uid, amt)
-                cur.execute("UPDATE deposits SET status='approved', amount=? WHERE id=?", (amt, dep_id))
-                cur.execute("UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?", (amt, t_uid))
-                db.commit()
+            async with get_user_lock(deposit_uid):
+                try:
+                    approval = approve_deposit(dep_id, amt)
+                except Exception:
+                    return await e.answer("❌ Deposit approval failed. No balance was credited.", alert=True)
+            if approval.get("already_processed"):
+                return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
+            credited_uid = approval["user_id"]
+            prev_bal = approval["previous_balance"]
+            new_bal = approval["balance"]
+            logger.info(
+                "Manual deposit approved: deposit_id=%s user_id=%s balance=%s status=%s",
+                dep_id, credited_uid, new_bal, approval["status"],
+            )
                 
-            await process_referral_bonus(t_uid, amt)
+            await process_referral_bonus(credited_uid, amt)
             conf_text = (f"<blockquote>{PE_CHECK} <b>✅ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ (𝐂ᴜsᴛᴏᴍ)!</b>\n\n"
-                         f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"
+                         f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{credited_uid}</code>\n"
                          f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐂ʀᴇᴅɪᴛᴇᴅ:</b> <b>{P_INR}{amt}</b>\n"
                          f"👨‍💻 <b>𝐀ᴘᴘʀᴏᴠᴇᴅ 𝐁ʏ:</b> <code>{uid}</code></blockquote>")
             await e.edit(conf_text)
             try:
-                await bot.send_message(int(t_uid), f"<blockquote>{PE_CHECK} <b>🎉 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐀ᴅᴅᴇᴅ:</b> <b>{P_INR}{amt}</b>\n📉 <b>𝐎ʟᴅ:</b> {P_INR}{prev_bal} | 📈 <b>𝐍ᴇᴡ:</b> <b>{P_INR}{prev_bal+amt}</b></blockquote>")
+                await bot.send_message(int(credited_uid), f"<blockquote>{PE_CHECK} <b>🎉 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐀ᴅᴅᴇᴅ:</b> <b>{P_INR}{amt}</b>\n📉 <b>𝐎ʟᴅ:</b> {P_INR}{prev_bal} | 📈 <b>𝐍ᴇᴡ:</b> <b>{new_bal}</b></blockquote>")
             except: pass
-            await e.answer(f"✅ Approved ₹{amt} for user {t_uid}.", alert=True)
+            await e.answer(f"✅ Approved ₹{amt} for user {credited_uid}.", alert=True)
             return
 
         custom_dep_amt[dep_id] = curr
