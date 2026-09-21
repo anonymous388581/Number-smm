@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import logging
 from telethon import TelegramClient
 from dotenv import load_dotenv

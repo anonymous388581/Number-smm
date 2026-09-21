@@ -1,623 +1,271 @@
-import logging
-import sqlite3
+"""MongoDB-only persistence facade for the Telegram bot."""
+
 import os
+
 from config import ADMIN_ID, SUPER_ADMINS, is_super_admin
+from mongo_cursor import MongoCursor
+from mongo_repository import MongoRepository
 
-logger = logging.getLogger(__name__)
+repository = MongoRepository()
+cur = MongoCursor(repository)
 
-# Initialize DB
-db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "otp_bot_final.db")
-db = sqlite3.connect(db_path, check_same_thread=False, timeout=20)
-db.execute("PRAGMA journal_mode=WAL;")
-cur = db.cursor()
 
-def setup_db():
-    cur.executescript("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        balance INTEGER DEFAULT 0,
-        referred_by INTEGER,
-        total_deposited INTEGER DEFAULT 0,
-        joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        banned INTEGER DEFAULT 0,
-        discount INTEGER DEFAULT 0,
-        terms_accepted INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
-    CREATE TABLE IF NOT EXISTS stock (
-        phone TEXT PRIMARY KEY,
-        session_file TEXT,
-        country_name TEXT,
-        country_icon TEXT DEFAULT '🌍',
-        account_year INTEGER,
-        category TEXT DEFAULT 'Good',
-        price INTEGER,
-        available INTEGER DEFAULT 1,
-        twofa TEXT DEFAULT 'None',
-        added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS auto_prices (
-        country TEXT,
-        year TEXT,
-        price INTEGER,
-        PRIMARY KEY (country, year)
-    );
-    CREATE TABLE IF NOT EXISTS spamfree_prices (
-        country TEXT PRIMARY KEY,
-        price INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS deposits (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        amount INTEGER,
-        method_name TEXT,
-        status TEXT, 
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS upi_orders (
-        order_id TEXT PRIMARY KEY,
-        user_id INTEGER,
-        amount INTEGER,
-        status TEXT,
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        country TEXT,
-        year INTEGER,
-        price INTEGER,
-        phone TEXT,
-        otp TEXT,
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS custom_payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        caption TEXT,
-        qr_file_id TEXT
-    );
-    CREATE TABLE IF NOT EXISTS admins (
-        user_id INTEGER PRIMARY KEY,
-        p_add_stock INTEGER DEFAULT 0,
-        p_manage_stock INTEGER DEFAULT 0,
-        p_stats INTEGER DEFAULT 0,
-        p_bal INTEGER DEFAULT 0,
-        p_settings INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS custom_countries (
-        code TEXT PRIMARY KEY,
-        name TEXT,
-        flag TEXT
-    );
-    CREATE TABLE IF NOT EXISTS smm_orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        server INTEGER DEFAULT 1,
-        service_id INTEGER,
-        service_name TEXT,
-        target_link TEXT,
-        quantity INTEGER,
-        price REAL,
-        smm_order_id TEXT,
-        status TEXT DEFAULT 'Pending',
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS source_codes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        description TEXT,
-        price REAL,
-        file_content TEXT,
-        available INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS panels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        description TEXT,
-        price REAL,
-        panel_content TEXT,
-        available INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS redeemed_transactions (
-        email_msg_id TEXT PRIMARY KEY,
-        utr TEXT,
-        txn_id TEXT,
-        amount REAL,
-        user_id INTEGER,
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_redeemed_utr ON redeemed_transactions(utr);
-    CREATE INDEX IF NOT EXISTS idx_redeemed_txn ON redeemed_transactions(txn_id);
-    """)
+class MongoRuntime:
+    repository = repository
 
-    # Seed hardcoded Super Admin with full permissions
-    for sa_id in SUPER_ADMINS:
-        if sa_id:
-            cur.execute("""
-                INSERT OR REPLACE INTO admins (user_id, p_add_stock, p_manage_stock, p_stats, p_bal, p_settings)
-                VALUES (?, 1, 1, 1, 1, 1)
-            """, (sa_id,))
-    db.commit()
+    def execute(self, query, params=()):
+        return cur.execute(query, params)
 
-setup_db()
+    def commit(self):
+        return None
 
-# ================= HELPER FUNCTIONS =================
-def is_bot_online():
-    res = cur.execute("SELECT value FROM settings WHERE key='bot_status'").fetchone()
-    return res[0] == 'on' if res else True
+    def rollback(self):
+        return None
+
+
+db = MongoRuntime()
+
+
+def initialize_runtime():
+    repository.ping()
+    repository.ensure_indexes()
+    for user_id in SUPER_ADMINS:
+        if user_id:
+            repository.db.admins.update_one(
+                {"_id": int(user_id)},
+                {"$set": {"user_id": int(user_id), "p_add_stock": 1,
+                          "p_manage_stock": 1, "p_stats": 1, "p_bal": 1,
+                          "p_settings": 1}},
+                upsert=True,
+            )
+
+
+def _setting(key, default=None):
+    row = cur.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def _set_setting(key, value):
+    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+
+
+def is_bot_online(): return _setting("bot_status", "on") == "on"
+
 
 def is_admin(uid):
-    if is_super_admin(uid): return True
-    row = cur.execute("SELECT user_id FROM admins WHERE user_id=?", (uid,)).fetchone()
-    return bool(row)
+    return is_super_admin(uid) or repository.db.admins.find_one({"_id": int(uid)}) is not None
+
 
 def has_perm(uid, perm):
     if is_super_admin(uid): return True
-    row = cur.execute(f"SELECT {perm} FROM admins WHERE user_id=?", (uid,)).fetchone()
-    return bool(row and row[0] == 1)
+    row = repository.db.admins.find_one({"_id": int(uid)}, {perm: 1})
+    return bool(row and row.get(perm) == 1)
 
-def ensure_user(uid, commit=True):
-    cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (uid,))
-    if commit:
-        db.commit()
+
+def ensure_user(uid, commit=True): repository.ensure_user(uid)
+
 
 def get_usdt_rate():
-    res = cur.execute("SELECT value FROM settings WHERE key='usdt_rate'").fetchone()
-    try: return float(res[0]) if res else 94.0
-    except: return 94.0
+    try: return float(_setting("usdt_rate", 94.0))
+    except (TypeError, ValueError): return 94.0
+
 
 def get_support_url():
-    res = cur.execute("SELECT value FROM settings WHERE key='support_url'").fetchone()
-    url = res[0] if res and res[0] else "https://t.me/sivamXpruff"
-    if not url.startswith("http"): url = "https://" + url.replace("@", "t.me/")
-    return url
+    url = _setting("support_url") or "https://t.me/sivamXpruff"
+    return url if url.startswith("http") else "https://" + url.replace("@", "t.me/")
 
-def to_usd(inr):
-    return round(inr / get_usdt_rate(), 2)
+
+def to_usd(inr): return round(inr / get_usdt_rate(), 2)
+
 
 def is_user_banned(uid):
-    res = cur.execute("SELECT banned FROM users WHERE user_id=?", (uid,)).fetchone()
-    return res and res[0] == 1
+    user = repository.get_user(uid)
+    return bool(user and user.get("banned") == 1)
 
-def update_balance(uid, amount):
-    cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, uid))
-    db.commit()
 
-def approve_deposit(deposit_id, amount):
-    """Credit a pending deposit and mark it approved atomically."""
-    user_id = None
-    try:
-        deposit = cur.execute(
-            "SELECT user_id, status, amount FROM deposits WHERE id=?", (deposit_id,)
-        ).fetchone()
-        if not deposit:
-            raise ValueError(f"deposit {deposit_id} does not exist")
+def update_balance(uid, amount): repository.update_balance(uid, amount)
+def approve_deposit(deposit_id, amount): return repository.approve_deposit(deposit_id, amount)
 
-        user_id, status, stored_amount = deposit
-        if status != "pending":
-            return {
-                "approved": False,
-                "already_processed": True,
-                "user_id": user_id,
-                "amount": stored_amount,
-            }
-        if not isinstance(user_id, int) or user_id <= 0:
-            raise ValueError(f"invalid user ID {user_id!r}")
-
-        ensure_user(user_id, commit=False)
-        previous = cur.execute(
-            "SELECT balance FROM users WHERE user_id=?", (user_id,)
-        ).fetchone()
-        if not previous:
-            raise ValueError(f"user {user_id} could not be created or found")
-        logger.info(
-            "Manual deposit approval before credit: deposit_id=%s user_id=%s amount=%s current_balance=%s",
-            deposit_id, user_id, amount, previous[0],
-        )
-
-        updated = cur.execute(
-            "UPDATE users SET balance = balance + ? WHERE user_id=?",
-            (amount, user_id),
-        )
-        if updated.rowcount != 1:
-            raise RuntimeError(
-                f"balance update affected {updated.rowcount} rows for user {user_id}"
-            )
-
-        current = cur.execute(
-            "SELECT balance FROM users WHERE user_id=?", (user_id,)
-        ).fetchone()
-        expected = previous[0] + amount
-        if not current or current[0] != expected:
-            raise RuntimeError(
-                f"balance verification failed for user {user_id}: "
-                f"expected {expected}, got {current[0] if current else None}"
-            )
-
-        marked = cur.execute(
-            "UPDATE deposits SET status='approved', amount=? "
-            "WHERE id=? AND status='pending'",
-            (amount, deposit_id),
-        )
-        if marked.rowcount != 1:
-            raise RuntimeError(f"deposit {deposit_id} status update affected {marked.rowcount} rows")
-
-        total_updated = cur.execute(
-            "UPDATE users SET total_deposited = total_deposited + ? WHERE user_id=?",
-            (amount, user_id),
-        )
-        if total_updated.rowcount != 1:
-            raise RuntimeError(f"total deposited update failed for user {user_id}")
-
-        db.commit()
-        return {
-            "approved": True,
-            "already_processed": False,
-            "user_id": user_id,
-            "previous_balance": previous[0],
-            "balance": current[0],
-            "amount": amount,
-            "status": "approved",
-        }
-    except Exception as exc:
-        db.rollback()
-        logger.error(
-            "Deposit approval failed: deposit_id=%s user_id=%s amount=%s error=%s",
-            deposit_id, user_id, amount, exc, exc_info=True,
-        )
-        raise
 
 COUNTRY_CODES = {
-    '1': ('USA/Canada', '🇺🇸'), '7': ('Russia', '🇷🇺'), '20': ('Egypt', '🇪🇬'),
-    '27': ('South Africa', '🇿🇦'), '31': ('Netherlands', '🇳🇱'), '32': ('Belgium', '🇧🇪'),
-    '33': ('France', '🇫🇷'), '34': ('Spain', '🇪🇸'), '39': ('Italy', '🇮🇹'), 
-    '44': ('UK', '🇬🇧'), '46': ('Sweden', '🇸🇪'), '48': ('Poland', '🇵🇱'),
-    '49': ('Germany', '🇩🇪'), '51': ('Peru', '🇵🇪'), '52': ('Mexico', '🇲🇽'),
-    '54': ('Argentina', '🇦🇷'), '55': ('Brazil', '🇧🇷'), '56': ('Chile', '🇨🇱'),
-    '57': ('Colombia', '🇨🇴'), '58': ('Venezuela', '🇻🇪'), '60': ('Malaysia', '🇲🇾'),
-    '61': ('Australia', '🇦🇺'), '62': ('Indonesia', '🇮🇩'), '63': ('Philippines', '🇵🇭'), 
-    '66': ('Thailand', '🇹🇭'), '84': ('Vietnam', '🇻🇳'), '86': ('China', '🇨🇳'), 
-    '90': ('Turkey', '🇹🇷'), '91': ('India', '🇮🇳'), '92': ('Pakistan', '🇵🇰'), 
-    '93': ('Afghanistan', '🇦🇫'), '94': ('Sri Lanka', '🇱🇰'), '95': ('Myanmar', '🇲🇲'),
-    '98': ('Iran', '🇮🇷'), '212': ('Morocco', '🇲🇦'), '213': ('Algeria', '🇩🇿'),
-    '234': ('Nigeria', '🇳🇬'), '254': ('Kenya', '🇰🇪'), '255': ('Tanzania', '🇹🇿'),
-    '380': ('Ukraine', '🇺🇦'), '880': ('Bangladesh', '🇧🇩'), '964': ('Iraq', '🇮🇶'),
-    '966': ('Saudi Arabia', '🇸🇦'), '971': ('UAE', '🇦🇪'), '998': ('Uzbekistan', '🇺🇿')
+    "1": ("USA/Canada", "🇺🇸"), "7": ("Russia", "🇷🇺"), "20": ("Egypt", "🇪🇬"),
+    "27": ("South Africa", "🇿🇦"), "31": ("Netherlands", "🇳🇱"), "32": ("Belgium", "🇧🇪"),
+    "33": ("France", "🇫🇷"), "34": ("Spain", "🇪🇸"), "39": ("Italy", "🇮🇹"),
+    "44": ("UK", "🇬🇧"), "46": ("Sweden", "🇸🇪"), "48": ("Poland", "🇵🇱"),
+    "49": ("Germany", "🇩🇪"), "51": ("Peru", "🇵🇪"), "52": ("Mexico", "🇲🇽"),
+    "54": ("Argentina", "🇦🇷"), "55": ("Brazil", "🇧🇷"), "56": ("Chile", "🇨🇱"),
+    "57": ("Colombia", "🇨🇴"), "58": ("Venezuela", "🇻🇪"), "60": ("Malaysia", "🇲🇾"),
+    "61": ("Australia", "🇦🇺"), "62": ("Indonesia", "🇮🇩"), "63": ("Philippines", "🇵🇭"),
+    "66": ("Thailand", "🇹🇭"), "84": ("Vietnam", "🇻🇳"), "86": ("China", "🇨🇳"),
+    "90": ("Turkey", "🇹🇷"), "91": ("India", "🇮🇳"), "92": ("Pakistan", "🇵🇰"),
+    "93": ("Afghanistan", "🇦🇫"), "94": ("Sri Lanka", "🇱🇰"), "95": ("Myanmar", "🇲🇲"),
+    "98": ("Iran", "🇮🇷"), "212": ("Morocco", "🇲🇦"), "213": ("Algeria", "🇩🇿"),
+    "234": ("Nigeria", "🇳🇬"), "254": ("Kenya", "🇰🇪"), "255": ("Tanzania", "🇹🇿"),
+    "380": ("Ukraine", "🇺🇦"), "880": ("Bangladesh", "🇧🇩"), "964": ("Iraq", "🇮🇶"),
+    "966": ("Saudi Arabia", "🇸🇦"), "971": ("UAE", "🇦🇪"), "998": ("Uzbekistan", "🇺🇿"),
 }
 
+
 def get_flag_by_country_name(name):
-    for code, (c_name, c_flag) in COUNTRY_CODES.items():
-        if c_name == name: return c_flag
-    try:
-        row = cur.execute("SELECT flag FROM custom_countries WHERE name=?", (name,)).fetchone()
-        if row: return row[0]
-    except: pass
-    return "🌍"
+    for country, flag in COUNTRY_CODES.values():
+        if country == name: return flag
+    row = repository.db.custom_countries.find_one({"name": name})
+    return row.get("flag", "🌍") if row else "🌍"
+
 
 def get_country_info(phone):
-    phone = str(phone).replace(' ', '').replace('+', '')
-    if not phone: return "Unknown", "🌍"
-    
-    try:
-        customs = cur.execute("SELECT code, name, flag FROM custom_countries").fetchall()
-        customs.sort(key=lambda x: len(x[0]), reverse=True)
-        for code, name, flag in customs:
-            if phone.startswith(code): return name, flag
-    except: pass
-
+    phone = str(phone).replace(" ", "").replace("+", "")
+    customs = sorted(repository.db.custom_countries.find({}), key=lambda x: len(str(x.get("code", ""))), reverse=True)
+    for row in customs:
+        if phone.startswith(str(row.get("code", ""))): return row.get("name"), row.get("flag", "🌍")
     for length in (3, 2, 1):
-        prefix = phone[:length]
-        if prefix in COUNTRY_CODES: return COUNTRY_CODES[prefix]
+        if phone[:length] in COUNTRY_CODES: return COUNTRY_CODES[phone[:length]]
     return "Unknown", "🌍"
 
+
 def get_bot_mode():
-    res = cur.execute("SELECT value FROM settings WHERE key='bot_mode'").fetchone()
-    if res and res[0] in ('manual', 'panel', 'hybrid'):
-        return res[0]
-    return os.getenv("BOT_MODE", "manual").strip().lower()
+    mode = _setting("bot_mode")
+    return mode if mode in ("manual", "panel", "hybrid") else os.getenv("BOT_MODE", "manual").lower()
 
-def set_bot_mode(mode):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('bot_mode', ?)", (mode,))
-    db.commit()
 
-def get_more_account_filters_enabled():
-    res = cur.execute("SELECT value FROM settings WHERE key='more_account_filters'").fetchone()
-    return res[0] != '0' if res and res[0] is not None else True
+def set_bot_mode(mode): _set_setting("bot_mode", mode)
+def get_more_account_filters_enabled(): return _setting("more_account_filters", "1") != "0"
+def set_more_account_filters_enabled(enabled): _set_setting("more_account_filters", "1" if enabled else "0")
+def get_lzt_key(): return str(_setting("lzt_api_key") or os.getenv("LZT_API_KEY", "")).strip()
+def set_lzt_key(key): _set_setting("lzt_api_key", key.strip())
 
-def set_more_account_filters_enabled(enabled):
-    value = '1' if enabled else '0'
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('more_account_filters', ?)", (value,))
-    db.commit()
-
-def get_lzt_key():
-    res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
-    if res and res[0]:
-        return res[0].strip()
-    return os.getenv("LZT_API_KEY", "").strip()
-
-def set_lzt_key(key):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('lzt_api_key', ?)", (key.strip(),))
-    db.commit()
 
 def get_rub_rate():
-    res = cur.execute("SELECT value FROM settings WHERE key='rub_rate'").fetchone()
-    if res and res[0]:
-        try: return float(res[0])
-        except: pass
-    try: return float(os.getenv("RUB_RATE", "1.15"))
-    except: return 1.15
+    try: return float(_setting("rub_rate") or os.getenv("RUB_RATE", "1.15"))
+    except (TypeError, ValueError): return 1.15
 
-def set_rub_rate(rate):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('rub_rate', ?)", (str(rate),))
-    db.commit()
+
+def set_rub_rate(rate): _set_setting("rub_rate", str(rate))
+
 
 def get_lzt_margin():
-    res = cur.execute("SELECT value FROM settings WHERE key='lzt_margin'").fetchone()
-    if res and res[0]:
-        try: return float(res[0])
-        except: pass
-    try: return float(os.getenv("LZT_MARGIN", "25.0"))
-    except: return 25.0
+    try: return float(_setting("lzt_margin") or os.getenv("LZT_MARGIN", "25.0"))
+    except (TypeError, ValueError): return 25.0
 
-def set_lzt_margin(margin):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('lzt_margin', ?)", (str(margin),))
-    db.commit()
 
-def adjust_price_by_mode(base_val, mode):
-    if mode == 'spam':
-        # Spam accounts discounted (~45% off, cheap for channel joiners while keeping profit 100% safe)
-        return max(int(base_val * 0.55), 15)
-    elif mode == 'nonspam':
-        # Non-spam / clean accounts priced higher for guaranteed 100% spam-free quality
-        return max(int(round(base_val * 1.25)), base_val + 8)
-    elif mode == 'premium':
-        return base_val + 150
-    return base_val
+def set_lzt_margin(margin): _set_setting("lzt_margin", str(margin))
 
-def get_panel_price(country, year, lzt_price_rub=0, mode='bulk'):
-    # Aged year price additions (if no explicit year price is set)
-    YEAR_ADDITIONS = {
-        2026: 0,
-        2025: 25,
-        2024: 55,
-        2023: 85,
-        2022: 125,
-        2021: 175,
-        2020: 230,
-        2019: 290,
-        2018: 350,
-        2017: 420
-    }
 
-    try: y_int = int(year)
-    except: y_int = 2026
+def adjust_price_by_mode(base, mode):
+    if mode == "spam": return max(int(base * 0.55), 15)
+    if mode == "nonspam": return max(int(round(base * 1.25)), base + 8)
+    if mode == "premium": return base + 150
+    return base
 
-    add_amount = YEAR_ADDITIONS.get(y_int, 0 if y_int >= 2026 else (2026 - y_int) * 60)
 
-    # 1. SPAM-FREE (NON-SPAM) MODE:
-    # Uses the fresh VIP Spam-Free price list directly!
-    if mode == 'nonspam':
-        row = cur.execute("SELECT price FROM spamfree_prices WHERE country=?", (country,)).fetchone()
-        if row and row[0] and row[0] > 0:
-            return int(row[0]) + add_amount
+def get_panel_price(country, year, lzt_price_rub=0, mode="bulk"):
+    additions = {2026: 0, 2025: 25, 2024: 55, 2023: 85, 2022: 125, 2021: 175, 2020: 230, 2019: 290, 2018: 350, 2017: 420}
+    try: year = int(year)
+    except (TypeError, ValueError): year = 2026
+    extra = additions.get(year, 0 if year >= 2026 else (2026 - year) * 60)
+    if mode == "nonspam":
+        row = repository.db.spamfree_prices.find_one({"_id": country})
+        if row and row.get("price", 0) > 0: return int(row["price"]) + extra
+    row = repository.db.auto_prices.find_one({"country": country, "year": str(year)})
+    if mode == "spam" and not row:
+        row = repository.db.auto_prices.find_one({"country": country, "year": {"$in": ["Common", "ALL"]}})
+    if row and row.get("price", 0) > 0:
+        value = int(row["price"]) + extra
+        return max(int(value * 0.55), 15) if mode == "spam" else adjust_price_by_mode(value, mode)
+    row = repository.db.auto_prices.find_one({"country": country, "year": {"$in": ["Common", "ALL"]}})
+    if row and row.get("price", 0) > 0: return adjust_price_by_mode(int(row["price"]) + extra, mode)
+    return adjust_price_by_mode(max(round(lzt_price_rub * get_rub_rate() + get_lzt_margin()), 25), mode)
 
-    # 2. SPAM / USED MODE:
-    # Retain the previous cheap pricing from base auto_prices table
-    if mode == 'spam':
-        row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
-        if not row:
-            row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
-        
-        if row and row[0] and row[0] > 0:
-            base = int(row[0])
-            total = base + add_amount
-            return max(int(total * 0.55), 15)
-        
-        # Dynamic fallback if no auto_price row
-        rub_rate = get_rub_rate()
-        margin = get_lzt_margin()
-        inr_cost = lzt_price_rub * rub_rate
-        calculated = round(inr_cost + margin)
-        final_p = max(int(calculated), 25)
-        return max(int(final_p * 0.55), 15)
-
-    # 3. Check if admin has set explicit custom price in auto_prices table for this specific (country, year)
-    row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (country, str(year))).fetchone()
-    if row and row[0] and row[0] > 0:
-        base = int(row[0])
-        return adjust_price_by_mode(base, mode)
-    
-    # 4. Get base country price (set with year='Common' or 'ALL')
-    row_all = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year IN ('Common', 'ALL')", (country,)).fetchone()
-    base_price = int(row_all[0]) if (row_all and row_all[0] and row_all[0] > 0) else None
-
-    if base_price is not None:
-        total = base_price + add_amount
-        return adjust_price_by_mode(total, mode)
-        
-    # 5. Dynamic calculation from LZT RUB price if no base price is found
-    rub_rate = get_rub_rate()
-    margin = get_lzt_margin()
-    inr_cost = lzt_price_rub * rub_rate
-    calculated = round(inr_cost + margin)
-    final_p = max(int(calculated), 25)
-    return adjust_price_by_mode(final_p, mode)
 
 def get_change_number_fee():
-    res = cur.execute("SELECT value FROM settings WHERE key='change_number_fee'").fetchone()
-    try:
-        return int(res[0]) if res and res[0] is not None else 10
-    except:
-        return 10
+    try: return int(_setting("change_number_fee", 10))
+    except (TypeError, ValueError): return 10
 
-def set_change_number_fee(fee):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('change_number_fee', ?)", (str(fee),))
-    db.commit()
 
-def get_fsub_status():
-    res = cur.execute("SELECT value FROM settings WHERE key='fsub_status'").fetchone()
-    return res[0].strip().lower() if res and res[0] else 'on'
+def set_change_number_fee(fee): _set_setting("change_number_fee", str(fee))
+def get_fsub_status(): return str(_setting("fsub_status", "on")).lower()
+def set_fsub_status(status): _set_setting("fsub_status", str(status).lower())
 
-def set_fsub_status(status):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fsub_status', ?)", (str(status).strip().lower(),))
-    db.commit()
 
 def get_fsub_channels():
-    res = cur.execute("SELECT value FROM settings WHERE key='fsub_channels'").fetchone()
-    if res and res[0] is not None:
-        val = res[0].strip()
-        if not val: return []
-        return [c.strip() for c in val.split(",") if c.strip()]
-    raw = os.getenv("CHECK_CHANNELS", "")
-    return [c.strip() for c in raw.split(",") if c.strip()]
+    value = _setting("fsub_channels")
+    return [x.strip() for x in value.split(",") if x.strip()] if value is not None else [x.strip() for x in os.getenv("CHECK_CHANNELS", "").split(",") if x.strip()]
+
 
 def get_fsub_urls():
     from utils.helpers import format_join_url
-    res = cur.execute("SELECT value FROM settings WHERE key='fsub_urls'").fetchone()
-    if res and res[0] is not None:
-        val = res[0].strip()
-        if not val: return []
-        return [format_join_url(u) for u in val.split(",") if u.strip()]
-    raw = os.getenv("JOIN_URLS", "")
-    return [format_join_url(u) for u in raw.split(",") if u.strip()]
+    value = _setting("fsub_urls")
+    raw = value.split(",") if value is not None else os.getenv("JOIN_URLS", "").split(",")
+    return [format_join_url(x) for x in raw if x.strip()]
 
-def set_fsub_data(channels_list, urls_list):
+
+def set_fsub_data(channels, urls):
     from utils.helpers import format_join_url
-    ch_str = ",".join([str(c).strip() for c in channels_list if str(c).strip()])
-    url_str = ",".join([format_join_url(u) for u in urls_list if format_join_url(u)])
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fsub_channels', ?)", (ch_str,))
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('fsub_urls', ?)", (url_str,))
-    db.commit()
+    _set_setting("fsub_channels", ",".join(str(x).strip() for x in channels if str(x).strip()))
+    _set_setting("fsub_urls", ",".join(format_join_url(x) for x in urls if format_join_url(x)))
+
 
 def add_fsub_channel(channel_id, join_url):
-    from utils.helpers import format_join_url
-    chs = get_fsub_channels()
-    urls = get_fsub_urls()
-    ch_str = str(channel_id).strip()
-    norm_url = format_join_url(join_url)
-    
-    if ch_str in chs:
-        idx = chs.index(ch_str)
-        if idx < len(urls):
-            urls[idx] = norm_url
-        else:
-            urls.append(norm_url)
-    else:
-        chs.append(ch_str)
-        urls.append(norm_url)
-        
-    set_fsub_data(chs, urls)
+    channels, urls = get_fsub_channels(), get_fsub_urls()
+    item = str(channel_id).strip()
+    if item in channels and channels.index(item) < len(urls): urls[channels.index(item)] = join_url
+    elif item not in channels: channels.append(item); urls.append(join_url)
+    set_fsub_data(channels, urls)
+
 
 def remove_fsub_channel(index):
-    chs = get_fsub_channels()
-    urls = get_fsub_urls()
-    if 0 <= index < len(chs):
-        chs.pop(index)
-        if index < len(urls):
-            urls.pop(index)
-        set_fsub_data(chs, urls)
+    channels, urls = get_fsub_channels(), get_fsub_urls()
+    if 0 <= index < len(channels):
+        channels.pop(index)
+        if index < len(urls): urls.pop(index)
+        set_fsub_data(channels, urls)
+
 
 def get_log_channels_db():
-    res = cur.execute("SELECT value FROM settings WHERE key='log_channels'").fetchone()
-    if res and res[0] is not None:
-        val = res[0].strip()
-        if not val: return []
-        out = []
-        for c in val.split(","):
-            c = c.strip()
-            if c:
-                try: out.append(int(c))
-                except: out.append(c)
-        return out
-    from config import LOG_CHANNELS
-    return LOG_CHANNELS
+    value = _setting("log_channels")
+    if value is None:
+        from config import LOG_CHANNELS
+        return LOG_CHANNELS
+    return [int(x) if x.strip().lstrip("-").isdigit() else x.strip() for x in value.split(",") if x.strip()]
 
-def set_log_channels_db(channels_list):
-    ch_str = ",".join([str(c).strip() for c in channels_list if str(c).strip()])
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('log_channels', ?)", (ch_str,))
-    db.commit()
 
+def set_log_channels_db(channels): _set_setting("log_channels", ",".join(str(x) for x in channels))
 def add_log_channel_db(channel_id):
-    chs = get_log_channels_db()
-    c_str = str(channel_id).strip()
-    try: val = int(c_str)
-    except: val = c_str
-    if val not in chs:
-        chs.append(val)
-        set_log_channels_db(chs)
+    channels = get_log_channels_db()
+    if str(channel_id) not in [str(x) for x in channels]: set_log_channels_db(channels + [channel_id])
+def remove_log_channel_db(channel_id): set_log_channels_db([x for x in get_log_channels_db() if str(x) != str(channel_id)])
+def get_start_image_url(): return str(_setting("start_image") or "https://yukiapi.site/file/0z3Q9oA9").strip()
+def set_start_image_url(url): _set_setting("start_image", url.strip())
 
-def remove_log_channel_db(channel_id):
-    chs = get_log_channels_db()
-    c_str = str(channel_id).strip()
-    chs = [c for c in chs if str(c) != c_str]
-    set_log_channels_db(chs)
 
-def get_start_image_url():
-    res = cur.execute("SELECT value FROM settings WHERE key='start_image'").fetchone()
-    if res and res[0]:
-        return res[0].strip()
-    return "https://yukiapi.site/file/0z3Q9oA9"
+def _catalog(collection, defaults):
+    rows = list(repository.db[collection].find({"available": 1}))
+    if not rows:
+        for values in defaults:
+            identifier = repository.next_id(collection)
+            content_field = "file_content" if collection == "source_codes" else "panel_content"
+            repository.db[collection].insert_one({"_id": identifier, "id": identifier, "title": values[0], "description": values[1], "price": values[2], content_field: values[3], "available": 1})
+        rows = list(repository.db[collection].find({"available": 1}))
+    return rows
 
-def set_start_image_url(url):
-    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('start_image', ?)", (url.strip(),))
-    db.commit()
 
 def get_source_codes():
-    rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
-    if not rows:
-        defaults = [
-            ("Main Store Bot (Full Modular Code)", "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.", 500.0, "https://github.com/SUDEEPBOTS/Numbott"),
-            ("OTP & SMM Bot Source Code", "Complete Python Telethon based automated OTP & SMM bot source code.", 299.0, "https://github.com/SUDEEPBOTS/Numbott")
-        ]
-        for t, d, p, f in defaults:
-            cur.execute("INSERT INTO source_codes (title, description, price, file_content) VALUES (?,?,?,?)", (t, d, p, f))
-        db.commit()
-        rows = cur.execute("SELECT id, title, description, price, file_content, available FROM source_codes WHERE available=1").fetchall()
-    return rows
+    rows = _catalog("source_codes", [("Main Store Bot (Full Modular Code)", "Complete full modular bot source code with OTP buying, SMM services, panels & instant delivery.", 500.0, "https://github.com/SUDEEPBOTS/Numbott"), ("OTP & SMM Bot Source Code", "Complete Python Telethon based automated OTP & SMM bot source code.", 299.0, "https://github.com/SUDEEPBOTS/Numbott")])
+    return [(r["id"], r["title"], r["description"], r["price"], r["file_content"], r["available"]) for r in rows]
+
 
 def get_panels():
-    rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1").fetchall()
-    if not rows:
-        defaults = [
-            ("VIP SMM Panel (Server 1)", "High-speed VIP SMM reseller panel with instant order delivery and auto balance top-up.", 399.0, "https://fathersmm.com"),
-            ("Budget SMM Panel (Server 2 - Cheap)", "Cheapest global SMM panel with over 1500+ bulk services and lowest wholesale rates.", 399.0, "https://best-smm.com")
-        ]
-        for t, d, p, f in defaults:
-            cur.execute("INSERT INTO panels (title, description, price, panel_content) VALUES (?,?,?,?)", (t, d, p, f))
-        db.commit()
-        rows = cur.execute("SELECT id, title, description, price, panel_content, available FROM panels WHERE available=1").fetchall()
-    return rows
+    rows = _catalog("panels", [("VIP SMM Panel (Server 1)", "High-speed VIP SMM panel with instant order delivery and auto balance top-up.", 399.0, "https://fathersmm.com"), ("Budget SMM Panel (Server 2 - Cheap)", "Cheapest global SMM reseller panel.", 399.0, "https://best-smm.com")])
+    return [(r["id"], r["title"], r["description"], r["price"], r["panel_content"], r["available"]) for r in rows]
+
 
 def is_payment_redeemed_db(email_msg_id=None, utr=None, txn_id=None):
-    if email_msg_id and str(email_msg_id).strip():
-        r = cur.execute("SELECT 1 FROM redeemed_transactions WHERE email_msg_id=?", (str(email_msg_id).strip(),)).fetchone()
-        if r: return True
-    if utr and str(utr).strip():
-        u_str = str(utr).strip()
-        r = cur.execute("SELECT 1 FROM redeemed_transactions WHERE utr=?", (u_str,)).fetchone()
-        if r: return True
-        r = cur.execute("SELECT 1 FROM deposits WHERE utr=? AND status='approved'", (u_str,)).fetchone()
-        if r: return True
-    if txn_id and str(txn_id).strip():
-        t_str = str(txn_id).strip()
-        r = cur.execute("SELECT 1 FROM redeemed_transactions WHERE txn_id=?", (t_str,)).fetchone()
-        if r: return True
-        r = cur.execute("SELECT 1 FROM deposits WHERE utr=? AND status='approved'", (t_str,)).fetchone()
-        if r: return True
+    if email_msg_id and repository.db.redeemed_transactions.find_one({"_id": str(email_msg_id).strip()}): return True
+    for field, value in (("utr", utr), ("txn_id", txn_id)):
+        if value and (repository.db.redeemed_transactions.find_one({field: str(value).strip()}) or repository.db.deposits.find_one({"utr": str(value).strip(), "status": "approved"})): return True
     return False
 
+
 def record_redeemed_payment_db(email_msg_id, utr, txn_id, amount, user_id):
-    try:
-        cur.execute("""
-            INSERT OR REPLACE INTO redeemed_transactions (email_msg_id, utr, txn_id, amount, user_id)
-            VALUES (?, ?, ?, ?, ?)
-        """, (email_msg_id or "", utr or "", txn_id or "", amount, user_id))
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.error(
-            "Recording redeemed payment failed: user_id=%s error_type=%s",
-            user_id, type(e).__name__, exc_info=True,
-        )
-        raise
+    document = {"_id": email_msg_id or "", "email_msg_id": email_msg_id or "", "utr": utr or "", "txn_id": txn_id or "", "amount": amount, "user_id": user_id}
+    repository.db.redeemed_transactions.replace_one({"_id": document["_id"]}, document, upsert=True)

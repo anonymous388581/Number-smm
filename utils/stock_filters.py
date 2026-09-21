@@ -48,6 +48,10 @@ def stock_filter_clause(mode, year=None, country=None):
 
 def claim_stock_account(connection, mode, year=None, country=None):
     """Atomically claim the first available local account matching the filter."""
+    repository = getattr(connection, "repository", None)
+    if repository is not None:
+        return repository.claim_stock_account(mode, country=country, year=year)
+
     where, params = stock_filter_clause(mode, year=year, country=country)
     candidates = connection.execute(
         f"SELECT phone, session_file, twofa FROM stock WHERE {where} ORDER BY rowid",

@@ -11,10 +11,12 @@ os.makedirs("sessions", exist_ok=True)
 
 # Import plugins AFTER bot is created so they can use it or register handlers
 from plugins import register_all_handlers
+from database import initialize_runtime
 
 from utils.health import start_health_server
 
 async def main():
+    initialize_runtime()
     try:
         await start_health_server()
     except Exception as e:

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("API_ID", "1")
 os.environ.setdefault("API_HASH", "test-api-hash")
+os.environ.setdefault("MONGODB_URI", "mongomock://localhost")
 
 from database import get_more_account_filters_enabled, set_more_account_filters_enabled
 from plugins import buy

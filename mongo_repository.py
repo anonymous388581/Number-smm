@@ -1,6 +1,7 @@
-"""MongoDB persistence primitives for migration and the future runtime cutover."""
+"""MongoDB persistence primitives used by the bot runtime."""
 
 import os
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -23,7 +24,14 @@ class MongoRepository:
         if client is None:
             if not self.uri:
                 raise RuntimeError("MONGODB_URI is required")
-            client = MongoClient(self.uri, serverSelectionTimeoutMS=10000)
+            if self.uri.startswith("mongomock://"):
+                try:
+                    import mongomock
+                except ImportError as exc:
+                    raise RuntimeError("mongomock is required for mongomock:// test URIs") from exc
+                client = mongomock.MongoClient()
+            else:
+                client = MongoClient(self.uri, serverSelectionTimeoutMS=10000)
         self.client = client
         self.db = client[self.database_name]
 
@@ -91,11 +99,11 @@ class MongoRepository:
         if mode == "aged":
             query["account_year"] = {"$ne": None}
         elif mode == "nonspam":
-            query["category"] = {"$exists": True, "$not": {"$regex": "^spam$", "$options": "i"}}
+            query["category"] = {"$exists": True, "$not": re.compile("^spam$", re.IGNORECASE)}
         elif mode == "spam":
-            query["category"] = {"$regex": "^spam$", "$options": "i"}
+            query["category"] = re.compile("^spam$", re.IGNORECASE)
         elif mode == "no_2fa":
-            query["$or"] = [{"twofa": None}, {"twofa": ""}, {"twofa": {"$regex": "^none$", "$options": "i"}}]
+            query["$or"] = [{"twofa": None}, {"twofa": ""}, {"twofa": re.compile("^none$", re.IGNORECASE)}]
         elif mode == "with_2fa":
             query["twofa"] = {"$nin": [None, "", "None", "none"]}
         elif mode != "bulk":
@@ -145,3 +153,10 @@ class MongoRepository:
     def get_setting(self, key, default=None):
         row = self.db.settings.find_one({"_id": key})
         return row.get("value", default) if row else default
+
+    def next_id(self, collection):
+        result = self.db._sequences.find_one_and_update(
+            {"_id": collection}, {"$inc": {"value": 1}},
+            upsert=True, return_document=ReturnDocument.AFTER,
+        )
+        return result["value"]
