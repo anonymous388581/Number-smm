@@ -19,6 +19,7 @@ from config import (
 from utils.keyboards import style_btn
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT
+from utils.stock_filters import stock_filter_clause
 
 search_state = {}
 change_number_state = {}
@@ -46,14 +47,23 @@ def get_active_order_card(order, phone, is_admin_user=False):
         btns.append([style_btn("❌ [Admin] Cancel & Refund", f"cancel_order|{phone}", "danger", icon=6129888444245089008)])
     return msg, btns
 
-async def get_countries_list():
-    """Retrieve available countries based on bot_mode."""
+async def get_local_stock_countries(mode="bulk", year=None):
+    """Return local countries and counts matching one stock filter."""
+    where, params = stock_filter_clause(mode, year=year)
+    rows = cur.execute(
+        f"SELECT country_name, COUNT(*) FROM stock WHERE {where} GROUP BY country_name",
+        params,
+    ).fetchall()
+    return sorted(rows, key=lambda x: x[0])
+
+
+async def get_countries_list(mode="bulk", year=None):
+    """Retrieve available countries based on bot_mode and the selected filter."""
     bot_mode = get_bot_mode()
-    
+
     # 1. Manual Mode: only local stock
     if bot_mode == 'manual':
-        rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
-        return sorted(rows, key=lambda x: x[0])
+        return await get_local_stock_countries(mode, year=year)
 
     # 2. Panel Mode: all supported countries from catalog
     if bot_mode == 'panel':
@@ -72,7 +82,7 @@ async def get_countries_list():
     except: pass
     
     country_dict = {c_name: '40+' for c_name in all_c}
-    local_rows = cur.execute("SELECT country_name, COUNT(*) FROM stock WHERE available=1 GROUP BY country_name").fetchall()
+    local_rows = await get_local_stock_countries(mode, year=year)
     for c_name, count in local_rows:
         country_dict[c_name] = count
 
@@ -97,7 +107,7 @@ async def search_countries_matching(query):
     from utils.lzt import get_lzt_code
     query_clean = query.strip().lower()
     dial_code = re.sub(r'[^\d]', '', query_clean)
-    all_countries = await get_countries_list()
+    all_countries = await get_countries_list("bulk")
     
     matches = []
     for c_name, count in all_countries:
@@ -197,8 +207,19 @@ async def show_buy_menu(event):
 async def show_years_catalog(event):
     msg = (f"<blockquote>🏛️ <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐘ᴇᴀʀ (𝐀ɢᴇ):</b>\n\n"
            f"<i>𝐀ɢᴇᴅ ᴀᴄᴄᴏᴜɴᴛs ʜᴀᴠᴇ ʜɪɢʜᴇʀ ᴛʀᴜsᴛ, ʟᴏᴡᴇʀ ʙᴀɴ ʀᴀᴛᴇs, ᴀɴᴅ ʟᴏɴɢᴇʀ ʜɪsᴛᴏʀʏ!</i></blockquote>")
+    bot_mode = get_bot_mode()
+    years = [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]
+    if bot_mode == 'manual':
+        rows = cur.execute(
+            "SELECT DISTINCT account_year FROM stock WHERE available=1 "
+            "AND account_year IS NOT NULL ORDER BY account_year DESC"
+        ).fetchall()
+        years = [row[0] for row in rows]
+        if not years:
+            return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ ᴛʜɪs ғɪʟᴛᴇʀ.")
+
     btns = []
-    for y in [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019]:
+    for y in years:
         label = YEAR_BADGES.get(y, f"📅 {y}")
         btns.append([style_btn(label, f"c_by_yr|{y}|1", "primary", icon=5408995930416362034)])
     btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)])
@@ -212,12 +233,12 @@ async def show_years_catalog(event):
 async def show_countries_for_year(event, year, page):
     limit = 10
     offset = (page - 1) * limit
-    countries_all = await get_countries_list()
+    countries_all = await get_countries_list("bulk", year=year)
     total = len(countries_all)
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ {year} ᴀᴛ ᴛʜᴇ ᴍᴏᴍᴇɴᴛ.")
+        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ ᴛʜɪs ғɪʟᴛᴇʀ.")
 
     btns = []
     for c_name, count in countries:
@@ -244,12 +265,12 @@ async def show_countries_for_year(event, year, page):
 async def show_countries(event, mode, page):
     limit = 12
     offset = (page - 1) * limit
-    countries_all = await get_countries_list()
+    countries_all = await get_countries_list(mode)
     total = len(countries_all)
     countries = countries_all[offset:offset+limit]
     
     if not countries:
-        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ᴀᴛ ᴛʜᴇ ᴍᴏᴍᴇɴᴛ. 𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ʙᴀᴄᴋ ʟᴀᴛᴇʀ!")
+        return await event.respond(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ ᴛʜɪs ғɪʟᴛᴇʀ.")
 
     btns = []
     for c_name, count in countries:
@@ -295,16 +316,12 @@ async def show_years(event, mode, country):
     
     # 1. Check local stock first
     if bot_mode in ('manual', 'hybrid'):
-        if mode == 'spam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)='spam' GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'nonspam':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'no_2fa':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') GROUP BY account_year, price", (country,)).fetchall()
-        elif mode == 'with_2fa':
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') GROUP BY account_year, price", (country,)).fetchall()
-        else:
-            rows = cur.execute("SELECT account_year, COUNT(*), price FROM stock WHERE country_name=? AND available=1 GROUP BY account_year, price", (country,)).fetchall()
+        where, params = stock_filter_clause(mode, country=country)
+        rows = cur.execute(
+            f"SELECT account_year, COUNT(*), price FROM stock WHERE {where} "
+            "GROUP BY account_year, price",
+            params,
+        ).fetchall()
             
         for y, count, price in rows:
             year_options.append({
@@ -331,12 +348,15 @@ async def show_years(event, mode, country):
         except Exception as e:
             logger.error(f"Error fetching LZT years for {country}: {e}")
 
-    # Fallback to standard aged years if no specific list was grouped
-    if not year_options:
+    # Manual mode must never manufacture panel years.
+    if not year_options and bot_mode != 'manual':
         for y in [2026, 2025, 2024, 2023, 2022, 2021]:
             year_options.append({
                 'year': y, 'count': '40+', 'price': get_panel_price(country, y, mode=mode), 'source': 'lzt'
             })
+
+    if not year_options:
+        return await event.edit(f"{P_WARN} 𝐍ᴏ sᴛᴏᴄᴋ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ ᴛʜɪs ғɪʟᴛᴇʀ.")
     
     flag = get_flag_by_country_name(country)
     btns = []
@@ -403,17 +423,12 @@ async def process_purchase(event, mode, country, year, price_str):
         if balance < final_price:
             return await event.answer("❌ Insufficient Balance!", alert=True)
 
-        # Check local stock first
-        if mode == 'spam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)='spam' LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'nonspam':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND LOWER(category)!='spam' AND category IS NOT NULL LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'no_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa='None' OR twofa IS NULL OR twofa='') LIMIT 1", (country, int(year))).fetchone()
-        elif mode == 'with_2fa':
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 AND (twofa!='None' AND twofa IS NOT NULL AND twofa!='') LIMIT 1", (country, int(year))).fetchone()
-        else:
-            local_row = cur.execute("SELECT phone, session_file, twofa FROM stock WHERE country_name=? AND account_year=? AND available=1 LIMIT 1", (country, int(year))).fetchone()
+        # Check local stock with the same predicate used by the catalog.
+        where, params = stock_filter_clause(mode, country=country, year=year)
+        local_row = cur.execute(
+            f"SELECT phone, session_file, twofa FROM stock WHERE {where} LIMIT 1",
+            params,
+        ).fetchone()
         
         is_local = (bot_mode in ('manual', 'hybrid')) and (local_row is not None)
         
