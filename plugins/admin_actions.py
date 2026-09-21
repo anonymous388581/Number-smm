@@ -24,6 +24,65 @@ from utils.keyboards import style_btn
 from utils.states import admin_state
 from utils.lzt import lzt_client
 from plugins.admin import admin_panel_handler
+from utils.stock_categories import CATEGORY_LABELS, category_value
+
+pending_stock_categories = {}
+
+
+def stock_category_buttons(token, kind):
+    return [
+        [style_btn("🟢 Non-Spam", f"adm_stock_category|{token}|{kind}|nonspam", "success"),
+         style_btn("🔴 Spam", f"adm_stock_category|{token}|{kind}|spam", "danger")],
+        [style_btn("❌ Cancel", f"adm_stock_category|{token}|{kind}|cancel", "danger")],
+    ]
+
+
+async def finalize_stock_category(event, token, selection):
+    draft = pending_stock_categories.pop((event.chat_id, event.sender_id, token), None)
+    if not draft:
+        return await event.answer("This stock operation has expired.", alert=True)
+    if selection == "cancel":
+        if draft["kind"] == "batch":
+            os.remove(draft["zip_path"])
+            shutil.rmtree(draft["extracted_dir"])
+        return await event.edit(f"{P_NO} Stock addition cancelled.")
+
+    category = category_value(selection)
+    if draft["kind"] == "single":
+        data = draft["account"]
+        cur.execute(
+            "INSERT OR REPLACE INTO stock "
+            "(phone, session_file, country_name, country_icon, account_year, category, "
+            "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
+            (data[0], data[1], data[2], data[3], data[4], category, data[5], data[6], data[7]),
+        )
+        db.commit()
+        label = CATEGORY_LABELS[selection]
+        return await event.edit(
+            f"{P_YES} <b>Account added successfully</b>\n"
+            f"{P_GLOBE} <b>Country:</b> {data[2]}\n"
+            f"{P_CAL} <b>Year:</b> {data[4]}\n"
+            f"🏷️ <b>Type:</b> {label}"
+        )
+
+    success = 0
+    for c_name, year, accs, c_icon, price, twofa_pass in draft["groups"]:
+        for acc in accs:
+            perm_base = f"sessions/{acc['phone']}"
+            for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
+                if os.path.exists(acc['path'] + ext):
+                    shutil.move(acc['path'] + ext, perm_base + ext)
+            cur.execute(
+                "INSERT OR REPLACE INTO stock "
+                "(phone, session_file, country_name, country_icon, account_year, category, "
+                "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
+                (acc['phone'], perm_base + ".session", c_name, c_icon, year, category, price, 1, twofa_pass),
+            )
+            success += 1
+    db.commit()
+    os.remove(draft["zip_path"])
+    shutil.rmtree(draft["extracted_dir"])
+    await event.edit(f"{P_YES} <b>Bulk Interactive Upload Complete!</b>\n{P_ON} Added: {success}")
 
 async def channels_manager_menu(event):
     fsub_status = get_fsub_status()
@@ -214,6 +273,12 @@ async def admin_actions(event):
         await event.delete()
         class FakeEvent: chat_id = chat; sender_id = uid
         return await admin_panel_handler(FakeEvent())
+
+    if action_data.startswith("stock_category|") and has_perm(uid, 'p_add_stock'):
+        _, token, kind, selection = action_data.split("|", 3)
+        if kind not in ("single", "batch") or selection not in ("nonspam", "spam", "cancel"):
+            return await event.answer("Invalid stock category selection.", alert=True)
+        return await finalize_stock_category(event, token, selection)
 
     if action_data == "togglebot" and has_perm(uid, 'p_settings'):
         new_status = 'off' if is_bot_online() else 'on'
@@ -636,7 +701,7 @@ async def admin_actions(event):
                         groups[new_key] = groups.pop(key)
                         for acc in groups[new_key]: acc["c_icon"] = new_icon
 
-                success = 0
+                prepared_groups = []
                 for (c_name, year, has_2fa), accs in groups.items():
                     c_icon = accs[0]["c_icon"]
                     twofa_pass = "None"
@@ -656,16 +721,19 @@ async def admin_actions(event):
                         else:
                             price = int((await get_reply(f"📌 Found {len(accs)}x {c_name} ({year}).\n{P_MONEY} Enter Price (₹):")).text)
 
-                    for acc in accs:
-                        perm_base = f"sessions/{acc['phone']}"
-                        for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
-                            if os.path.exists(acc['path'] + ext): shutil.move(acc['path'] + ext, perm_base + ext)
-                        cur.execute("INSERT OR REPLACE INTO stock (phone, session_file, country_name, country_icon, account_year, category, price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)", 
-                                    (acc['phone'], perm_base + ".session", c_name, c_icon, year, 'Good', price, 1, twofa_pass))
-                        success += 1
-                db.commit()
-                os.remove(zip_path); shutil.rmtree(extracted_dir)
-                await conv.send_message(f"{P_YES} <b>Bulk Interactive Upload Complete!</b>\n{P_ON} Added: {success}")
+                    prepared_groups.append((c_name, year, accs, c_icon, price, twofa_pass))
+
+                token = str(int(time.time() * 1000))
+                pending_stock_categories[(chat, uid, token)] = {
+                    "kind": "batch",
+                    "groups": prepared_groups,
+                    "zip_path": zip_path,
+                    "extracted_dir": extracted_dir,
+                }
+                await conv.send_message(
+                    "<b>Select type for this batch</b>",
+                    buttons=stock_category_buttons(token, "batch"),
+                )
 
             elif action_data == "addstock" and has_perm(uid, 'p_add_stock'):
                 phone = (await get_reply(f"{P_PHONE} Enter Phone (+919999...):")).text.replace(" ", "").replace("+", "")
@@ -720,10 +788,15 @@ async def admin_actions(event):
                         await conv.send_message(f"⚡ <b>Auto-detected Price:</b> {P_INR}{price} for {c_name}")
                     else: price = int((await get_reply(f"{P_MONEY} Price (₹):")).text)
                 
-                cur.execute("INSERT OR REPLACE INTO stock (phone, session_file, country_name, country_icon, account_year, category, price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)", 
-                            (phone, sp + ".session", c_name, c_icon, year, 'Good', price, 1, twofa_pass))
-                db.commit()
-                await conv.send_message(f"{P_YES} Added!")
+                token = str(int(time.time() * 1000))
+                pending_stock_categories[(chat, uid, token)] = {
+                    "kind": "single",
+                    "account": (phone, sp + ".session", c_name, c_icon, year, price, 1, twofa_pass),
+                }
+                await conv.send_message(
+                    "<b>Select Account Type</b>",
+                    buttons=stock_category_buttons(token, "single"),
+                )
 
             elif action_data == "supporturl" and has_perm(uid, 'p_settings'):
                 url = (await get_reply("🔗 Enter new Support URL (must start with http:// or https://):")).text
