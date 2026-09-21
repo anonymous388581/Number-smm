@@ -48,7 +48,24 @@ JOIN_URLS=https://t.me/I_VIP_RADHE_II,https://t.me/+rdXT1GR_nCg1OTg1,https://t.m
 # Payment Credentials
 CWALLET_ID=93020854
 UPI_ID=vinit-godara@fam
+
+# MongoDB migration target (required only for migration/cutover)
+MONGODB_URI=mongodb+srv://username:password@cluster.example/numbott
+MONGODB_DB_NAME=numbott
 ```
+
+### SQLite to MongoDB migration
+
+The original `otp_bot_final.db` is opened read-only and is never deleted or modified.
+After installing the requirements, run the one-time migration with `MONGODB_URI` set:
+
+```bash
+python migrate_sqlite_to_mongo.py --sqlite otp_bot_final.db
+```
+
+The migrator is insert-only and prints record counts, balance totals, stock aggregates,
+deposit statuses, and order counts for SQLite and MongoDB. It does not drop collections
+or overwrite existing MongoDB documents.
 
 ---
 
@@ -82,7 +99,7 @@ python main.py
 
 - **Core Engine:** [Python 3.10+](https://www.python.org/)
 - **Telegram Framework:** [Telethon (MTProto API Client)](https://github.com/LonamiWebs/Telethon)
-- **Database:** SQLite3
+- **Database:** SQLite3 (current runtime) with MongoDB migration repository prepared
 - **Process Manager:** `tmux` / Background Daemon execution
 
 ---
