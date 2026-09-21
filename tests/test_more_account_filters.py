@@ -42,9 +42,11 @@ class MoreAccountFiltersTests(unittest.TestCase):
             self.assertTrue(get_more_account_filters_enabled())
         connection.close()
 
-    def menu(self, enabled):
+    def menu(self, bot_mode, enabled):
         event = FakeEvent()
-        with patch.object(buy, "get_more_account_filters_enabled", return_value=enabled):
+        with patch.object(buy, "get_bot_mode", return_value=bot_mode), patch.object(
+            buy, "get_more_account_filters_enabled", return_value=enabled
+        ):
             asyncio.run(buy.show_buy_menu(event))
         callbacks = [
             button.data.decode() if isinstance(button.data, bytes) else button.data
@@ -53,16 +55,36 @@ class MoreAccountFiltersTests(unittest.TestCase):
         ]
         return event.message, callbacks
 
-    def test_more_filters_button_is_present_when_on(self):
-        message, callbacks = self.menu(True)
+    def test_manual_more_filters_button_is_present_when_on(self):
+        message, callbacks = self.menu("manual", True)
         self.assertIn("pg_filters|1", callbacks)
         self.assertIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
 
-    def test_more_filters_button_is_absent_when_off(self):
-        message, callbacks = self.menu(False)
+    def test_manual_more_filters_button_is_absent_when_off(self):
+        message, callbacks = self.menu("manual", False)
         self.assertNotIn("pg_filters|1", callbacks)
         self.assertNotIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
         self.assertIn("pg_c|bulk|1", callbacks)
+
+    def test_panel_more_filters_button_is_present_when_off(self):
+        message, callbacks = self.menu("panel", False)
+        self.assertIn("pg_filters|1", callbacks)
+        self.assertIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
+
+    def test_panel_more_filters_button_is_present_when_on(self):
+        message, callbacks = self.menu("panel", True)
+        self.assertIn("pg_filters|1", callbacks)
+        self.assertIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
+
+    def test_hybrid_more_filters_button_is_present_when_off(self):
+        message, callbacks = self.menu("hybrid", False)
+        self.assertIn("pg_filters|1", callbacks)
+        self.assertIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
+
+    def test_hybrid_more_filters_button_is_present_when_on(self):
+        message, callbacks = self.menu("hybrid", True)
+        self.assertIn("pg_filters|1", callbacks)
+        self.assertIn("𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs", message)
 
 
 if __name__ == "__main__":

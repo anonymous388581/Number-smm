@@ -183,9 +183,13 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
+    show_more_filters = (
+        get_more_account_filters_enabled()
+        if get_bot_mode() == "manual" else True
+    )
     more_filters_line = (
         "🎯 <b>𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs:</b> 𝐒ᴛᴀʀs, 𝐄ᴍᴀɪʟ, 2𝐅𝐀, 𝐏ʀᴇᴍɪᴜᴍ, 𝐃𝐂...\n"
-        if get_more_account_filters_enabled() else ""
+        if show_more_filters else ""
     )
     msg = (f"<blockquote>{PE_GIFT} <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐂ᴀᴛᴇɢᴏʀʏ:</b>\n\n"
            f"🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ:</b> 𝐐ᴜɪᴄᴋ ʟᴏᴏᴋᴜᴘ ʙʏ ɴᴀᴍᴇ ᴏʀ ᴅɪᴀʟ ᴄᴏᴅᴇ (+91, +55...)\n"
@@ -204,7 +208,7 @@ async def show_buy_menu(event):
         [style_btn("🏛️ 𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs (ʙʏ 𝐘ᴇᴀʀ)", b"by_years_menu", "primary", icon=5408995930416362034)],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
-    if get_more_account_filters_enabled():
+    if show_more_filters:
         btns.insert(3, [style_btn("🎯 𝐌ᴏʀᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀs (𝐒ᴛᴀʀs/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)])
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
