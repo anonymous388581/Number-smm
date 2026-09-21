@@ -17,7 +17,8 @@ from database import (
     get_fsub_channels, get_fsub_urls, set_fsub_data, add_fsub_channel,
     remove_fsub_channel, get_log_channels_db, set_log_channels_db,
     add_log_channel_db, remove_log_channel_db, get_change_number_fee,
-    set_change_number_fee
+    set_change_number_fee, get_more_account_filters_enabled,
+    set_more_account_filters_enabled
 )
 from config import *
 from utils.keyboards import style_btn
@@ -296,6 +297,16 @@ async def admin_actions(event):
         set_bot_mode(nxt)
         mode_names = {'manual': '📂 Manual Mode', 'panel': '🌐 Panel (LZT) Mode', 'hybrid': '⚡ Hybrid Mode'}
         await event.answer(f"Switched to {mode_names[nxt]}", alert=True)
+        class FakeEvent: chat_id = chat; sender_id = uid
+        await admin_panel_handler(FakeEvent())
+        await event.delete()
+        return
+
+    elif action_data == "toggle_more_filters" and has_perm(uid, 'p_settings'):
+        enabled = not get_more_account_filters_enabled()
+        set_more_account_filters_enabled(enabled)
+        state = "ON" if enabled else "OFF"
+        await event.answer(f"More Account Filters switched {state}!", alert=True)
         class FakeEvent: chat_id = chat; sender_id = uid
         await admin_panel_handler(FakeEvent())
         await event.delete()

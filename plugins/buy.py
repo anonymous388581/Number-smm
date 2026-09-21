@@ -10,7 +10,10 @@ from telethon.errors import (
     FreshChangePhoneForbiddenError, FloodWaitError
 )
 from telethon.tl.functions.account import SendChangePhoneCodeRequest, ChangePhoneRequest
-from database import cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price, get_lzt_key, get_change_number_fee
+from database import (
+    cur, db, get_flag_by_country_name, get_bot_mode, get_panel_price, get_lzt_key,
+    get_change_number_fee, get_more_account_filters_enabled,
+)
 from config import (
     PE_LOCATION, PE_GIFT, PE_LIGHTNING, PE_CHECK, P_MONEY, P_PKG, P_CARD, P_WARN,
     P_NO, P_YES, P_INR, P_TIME, P_FLAG, P_OTP, P_2FA, P_PHONE, AUTO_CANCEL_SECONDS,
@@ -180,11 +183,15 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
+    more_filters_line = (
+        "🎯 <b>𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs:</b> 𝐒ᴛᴀʀs, 𝐄ᴍᴀɪʟ, 2𝐅𝐀, 𝐏ʀᴇᴍɪᴜᴍ, 𝐃𝐂...\n"
+        if get_more_account_filters_enabled() else ""
+    )
     msg = (f"<blockquote>{PE_GIFT} <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐂ᴀᴛᴇɢᴏʀʏ:</b>\n\n"
            f"🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ:</b> 𝐐ᴜɪᴄᴋ ʟᴏᴏᴋᴜᴘ ʙʏ ɴᴀᴍᴇ ᴏʀ ᴅɪᴀʟ ᴄᴏᴅᴇ (+91, +55...)\n"
            f"🟢 <b>𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ:</b> 100% 𝐒ᴘᴀᴍʙʟᴏᴄᴋ-𝐅ʀᴇᴇ (𝐃𝐌 & 𝐏ᴇʀsᴏɴᴀʟ 𝐔sᴇ).\n"
            f"🟡 <b>𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ):</b> 𝐁ᴜᴅɢᴇᴛ 𝐀ᴄᴄᴏᴜɴᴛs (𝐂ʜᴀɴɴᴇʟ 𝐉ᴏɪɴᴇʀs & 𝐌ᴇᴍʙᴇʀs).\n"
-           f"🎯 <b>𝐌ᴏʀᴇ 𝐅ɪʟᴛᴇʀs:</b> 𝐒ᴛᴀʀs, 𝐄ᴍᴀɪʟ, 2𝐅𝐀, 𝐏ʀᴇᴍɪᴜᴍ, 𝐃𝐂...\n"
+           f"{more_filters_line}"
            f"🌍 <b>𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs:</b> 𝐁ʀᴏᴡsᴇ 50+ ᴄᴏᴜɴᴛʀɪᴇs sᴛᴏᴄᴋ (𝐅ʀᴇsʜ & 𝐀ʟʟ).\n"
            f"🏛️ <b>𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs:</b> 𝐅ɪʟᴛᴇʀ ʙʏ 𝐒ᴘᴇᴄɪғɪᴄ 𝐘ᴇᴀʀ (2025, 2024, 2023...).</blockquote>")
     btns = [
@@ -193,11 +200,12 @@ async def show_buy_menu(event):
             style_btn("🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ", b"pg_c|nonspam|1", "success", icon=5409320020058584473),
             style_btn("🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)", b"pg_c|spam|1", "primary", icon=5408995930416362034)
         ],
-        [style_btn("🎯 𝐌ᴏʀᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀs (𝐒ᴛᴀʀs/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)],
         [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs (𝐅ʀᴇsʜ & 𝐀ʟʟ)", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
         [style_btn("🏛️ 𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs (ʙʏ 𝐘ᴇᴀʀ)", b"by_years_menu", "primary", icon=5408995930416362034)],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
+    if get_more_account_filters_enabled():
+        btns.insert(3, [style_btn("🎯 𝐌ᴏʀᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀs (𝐒ᴛᴀʀs/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)])
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass

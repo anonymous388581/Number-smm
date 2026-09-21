@@ -321,6 +321,15 @@ def set_bot_mode(mode):
     cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('bot_mode', ?)", (mode,))
     db.commit()
 
+def get_more_account_filters_enabled():
+    res = cur.execute("SELECT value FROM settings WHERE key='more_account_filters'").fetchone()
+    return res[0] != '0' if res and res[0] is not None else True
+
+def set_more_account_filters_enabled(enabled):
+    value = '1' if enabled else '0'
+    cur.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('more_account_filters', ?)", (value,))
+    db.commit()
+
 def get_lzt_key():
     res = cur.execute("SELECT value FROM settings WHERE key='lzt_api_key'").fetchone()
     if res and res[0]:
