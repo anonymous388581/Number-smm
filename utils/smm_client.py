@@ -1,24 +1,39 @@
 import aiohttp
 import asyncio
 import logging
+import os
 import time
 from config import logger
 from database import to_usd
 
-SMM_SERVERS = {
-    1: {
-        'name': '𝐕𝐈𝐏 𝐒ᴇʀᴠᴇʀ 1 (𝐅ᴀsᴛ & 𝐈ɴsᴛᴀɴᴛ)',
-        'url': 'https://fathersmm.com/api/v2',
-        'key': '7693898241322ddfeea23dca2e59fc88',
-        'currency': 'INR'
-    },
-    2: {
-        'name': '𝐁ᴜᴅɢᴇᴛ 𝐒ᴇʀᴠᴇʀ 2 (𝐂ʜᴇᴀᴘᴇsᴛ 𝐑ᴀᴛᴇ)',
-        'url': 'https://best-smm.com/api/v2',
-        'key': 'cc77a5fe7218f0bc0c38e2a7f768c77f',
-        'currency': 'USD'
+def _smm_server_config(server, name, url, currency):
+    return {
+        'name': name,
+        'url': url,
+        'key': os.getenv(f'SMM_SERVER_{server}_KEY', '').strip(),
+        'currency': currency
     }
+
+
+SMM_SERVERS = {
+    1: _smm_server_config(1, '𝐕𝐈𝐏 𝐒ᴇʀᴠᴇʀ 1 (𝐅ᴀsᴛ & 𝐈ɴsᴛᴀɴᴛ)', 'https://fathersmm.com/api/v2', 'INR'),
+    2: _smm_server_config(2, '𝐁ᴜᴅɢᴇᴛ 𝐒ᴇʀᴠᴇʀ 2 (𝐂ʜᴇᴀᴘᴇsᴛ 𝐑ᴀᴛᴇ)', 'https://best-smm.com/api/v2', 'USD')
 }
+
+
+def _get_smm_server(server):
+    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    missing = []
+    if not srv['key']:
+        missing.append(f'SMM_SERVER_{server}_KEY')
+    if missing:
+        logger.error(
+            'SMM server %s is not configured; missing environment variable(s): %s',
+            server,
+            ', '.join(missing),
+        )
+        return None
+    return srv
 
 _services_cache = {1: None, 2: None}
 _cache_time = {1: 0, 2: 0}
@@ -61,7 +76,9 @@ async def fetch_smm_services(server=1, force_refresh=False):
     if not force_refresh and _services_cache.get(server) and (now - _cache_time.get(server, 0) < 600):
         return _services_cache[server]
         
-    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    srv = _get_smm_server(server)
+    if srv is None:
+        return _services_cache.get(server) or []
     params = {
         'key': srv['key'],
         'action': 'services'
@@ -140,7 +157,9 @@ def get_service_inr_rate(service, server=1):
     return round(rate_raw, 2)
 
 async def create_smm_order(service_id, link, quantity, server=1):
-    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    srv = _get_smm_server(server)
+    if srv is None:
+        return {'error': f'SMM server {server} is not configured.'}
     params = {
         'key': srv['key'],
         'action': 'add',
@@ -159,7 +178,9 @@ async def create_smm_order(service_id, link, quantity, server=1):
         return {'error': str(ex)}
 
 async def get_smm_order_status(order_id, server=1):
-    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    srv = _get_smm_server(server)
+    if srv is None:
+        return {'error': f'SMM server {server} is not configured.'}
     params = {
         'key': srv['key'],
         'action': 'status',

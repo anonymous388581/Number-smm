@@ -44,3 +44,23 @@ def stock_filter_clause(mode, year=None, country=None):
         clauses.append("account_year=?")
         params.append(int(year))
     return " AND ".join(clauses), params
+
+
+def claim_stock_account(connection, mode, year=None, country=None):
+    """Atomically claim the first available local account matching the filter."""
+    where, params = stock_filter_clause(mode, year=year, country=country)
+    candidates = connection.execute(
+        f"SELECT phone, session_file, twofa FROM stock WHERE {where} ORDER BY rowid",
+        params,
+    ).fetchall()
+
+    for candidate in candidates:
+        phone = candidate[0]
+        claimed = connection.execute(
+            f"UPDATE stock SET available=0 WHERE phone=? AND {where}",
+            (phone, *params),
+        )
+        if claimed.rowcount == 1:
+            return candidate
+
+    return None

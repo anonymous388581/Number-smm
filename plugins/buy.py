@@ -22,7 +22,7 @@ from config import (
 from utils.keyboards import style_btn
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT
-from utils.stock_filters import stock_filter_clause
+from utils.stock_filters import claim_stock_account, stock_filter_clause
 
 search_state = {}
 change_number_state = {}
@@ -440,14 +440,11 @@ async def process_purchase(event, mode, country, year, price_str):
         if balance < final_price:
             return await event.answer("❌ Insufficient Balance!", alert=True)
 
-        # Check local stock with the same predicate used by the catalog.
-        where, params = stock_filter_clause(mode, country=country, year=year)
-        local_row = cur.execute(
-            f"SELECT phone, session_file, twofa FROM stock WHERE {where} LIMIT 1",
-            params,
-        ).fetchone()
-        
-        is_local = (bot_mode in ('manual', 'hybrid')) and (local_row is not None)
+        local_row = None
+        is_local = bot_mode in ('manual', 'hybrid')
+        if is_local:
+            local_row = claim_stock_account(db, mode, country=country, year=year)
+            is_local = local_row is not None
         
         if not is_local and bot_mode == 'manual':
             return await event.answer("❌ Out of stock!", alert=True)
@@ -455,8 +452,9 @@ async def process_purchase(event, mode, country, year, price_str):
         if is_local:
             phone, sess, twofa_pass = local_row
             cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (final_price, uid, final_price))
-            if cur.rowcount == 0: return await event.answer("❌ Insufficient Balance!", alert=True)
-            cur.execute("UPDATE stock SET available=0 WHERE phone=?", (phone,))
+            if cur.rowcount == 0:
+                db.rollback()
+                return await event.answer("❌ Insufficient Balance!", alert=True)
             db.commit()
         else:
             # Panel / LZT order: reserve balance first
