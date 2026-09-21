@@ -671,12 +671,12 @@ async def auto_otp_task(phone):
             
             if code:
                 if not order['paid']:
-                    order['paid'] = True
                     async with get_user_lock(uid):
                         cur.execute("INSERT INTO orders (user_id, country, year, price, phone, otp) VALUES (?,?,?,?,?,?)", (uid, order['country'], order['year'], order['price'], phone, code))
                         if not order.get('is_lzt'):
                             cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
                         db.commit()
+                        order['paid'] = True
                         
                         from database import get_log_channels_db
                         from config import P_YES
@@ -707,7 +707,7 @@ async def auto_otp_task(phone):
     if phone in active_orders and not active_orders[phone]['paid']:
         order = active_orders.pop(phone)
         try: await order['client'].disconnect()
-        except: pass
+        except Exception as exc: logger.warning("Order client disconnect failed after timeout: error_type=%s", type(exc).__name__)
         
         # Local manual stock -> refund & restore stock
         if not order.get('is_lzt'):
@@ -716,11 +716,11 @@ async def auto_otp_task(phone):
                 cur.execute("UPDATE stock SET available=1 WHERE phone=?", (phone,))
                 db.commit()
             try: await bot.edit_message(uid, msg_id, f"<blockquote>{P_TIME} <b>𝐎ʀᴅᴇʀ 𝐄xᴘɪʀᴇᴅ!</b>\n\n𝐓ʜᴇ 10-ᴍɪɴᴜᴛᴇ ʟɪᴍɪᴛ ғᴏʀ <code>+{phone}</code> ʀᴀɴ ᴏᴜᴛ. 𝐘ᴏᴜʀ ᴍᴏɴᴇʏ ({P_INR}{order['price']}) ʜᴀs ʙᴇᴇɴ ʀᴇғᴜɴᴅᴇᴅ.</blockquote>")
-            except: pass
+            except Exception as exc: logger.warning("Expired order notification failed: error_type=%s", type(exc).__name__)
         else:
             # LZT Panel purchased accounts -> do not auto-refund to prevent wallet drainage exploits
             try: await bot.edit_message(uid, msg_id, f"<blockquote>{P_TIME} <b>𝐒ᴇssɪᴏɴ 𝐓ɪᴍᴇᴏᴜᴛ</b>\n\n𝐓ʜᴇ 10-ᴍɪɴᴜᴛᴇ ʟɪsᴛᴇɴᴇʀ ғᴏʀ <code>+{phone}</code> ʜᴀs ᴇɴᴅᴇᴅ.\n𝐈ғ ʏᴏᴜ ɴᴇᴇᴅ ᴀssɪsᴛᴀɴᴄᴇ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ 𝐒ᴜᴘᴘᴏʀᴛ.</blockquote>")
-            except: pass
+            except Exception as exc: logger.warning("LZT timeout notification failed: error_type=%s", type(exc).__name__)
 
 def register_buy(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^(🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ|🛒 Buy Account|📁 Buy Sessions)$"))

@@ -56,7 +56,8 @@ async def process_referral_bonus(user_id, amt):
             db.commit()
             
         try: await bot.send_message(int(ref_id), f"{PE_GIFT} <b>Referral Bonus!</b>\nYour friend deposited {P_INR}{amt}. You received <b>{P_INR}{bonus}</b> ({pct}%) in your balance!")
-        except: pass
+        except Exception as exc:
+            logger.warning("Referral bonus notification failed: error_type=%s", type(exc).__name__)
     except Exception as e: logger.error(f"Ref bonus error: {e}")
 
 def get_admin_custom_keypad(dep_id):
@@ -268,7 +269,9 @@ def register_deposit(bot):
                         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", "dashboard_main", "danger", icon=6129812419028982717)]
                     ]
                     try: await status_msg.edit(success_text, buttons=btns)
-                    except: await e.reply(success_text, buttons=btns)
+                    except Exception as exc:
+                        logger.warning("Auto deposit success message edit failed; using reply fallback: error_type=%s", type(exc).__name__)
+                        await e.reply(success_text, buttons=btns)
                     
                     for log_ch in get_log_channels_db():
                         try:
@@ -284,7 +287,9 @@ def register_deposit(bot):
                                  f"• 𝐈ғ ʏᴏᴜ ᴊᴜsᴛ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴡᴀɪᴛ <b>1-2 ᴍɪɴᴜᴛᴇs</b> ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.\n"
                                  f"• 𝐎ʀ ᴜsᴇ <b>✍️ 𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈</b> ᴛᴏ ᴜᴘʟᴏᴀᴅ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ sᴄʀᴇᴇɴsʜᴏᴛ.</blockquote>")
                     try: await status_msg.edit(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
-                    except: await e.reply(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
+                    except Exception as exc:
+                        logger.warning("Auto deposit failure message edit failed; using reply fallback: error_type=%s", type(exc).__name__)
+                        await e.reply(fail_text, buttons=[[Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", "cancel_action")]])
                     return
 
         # 2. MANUAL SCREENSHOT / PROOF FLOW
@@ -341,8 +346,8 @@ def register_deposit(bot):
                         else:
                             await bot.send_message(a_id, f"🔔 <b>[FALLBACK PAYMENT APPROVAL]</b>\n{cap}", buttons=btns)
                         break  # Delivered to admin PM
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Payment approval fallback delivery failed: attempt=%s error_type=%s", admin_ids.index(a_id) + 1, type(exc).__name__)
             except Exception as e_adm:
                 logger.error(f"Error sending fallback deposit to admin DM: {e_adm}")
 
@@ -385,7 +390,8 @@ def register_deposit(bot):
                         f"📉 <b>𝐏ʀᴇᴠɪᴏᴜs 𝐁ᴀʟᴀɴᴄᴇ:</b> {P_INR}{prev_bal}\n"
                         f"📈 <b>𝐍ᴇᴡ 𝐁ᴀʟᴀɴᴄᴇ:</b> <b>{P_INR}{new_bal}</b> (${to_usd(new_bal):.2f})</blockquote>")
             try: await bot.send_message(int(credited_uid), user_msg)
-            except: pass
+            except Exception as exc:
+                logger.warning("Deposit approval user notification failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
             
             approved_text = (f"<blockquote>{PE_CHECK} <b>✅ 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n"
                              f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{credited_uid}</code>\n"
@@ -418,7 +424,8 @@ def register_deposit(bot):
         
         try:
             await bot.send_message(int(t_uid), f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴅᴇᴘᴏsɪᴛ ʀᴇǫᴜᴇsᴛ ᴏғ <b>{P_INR}{row[1]}</b> ᴡᴀs ʀᴇᴊᴇᴄᴛᴇᴅ ʙʏ ᴀᴅᴍɪɴ.\n𝐈ғ ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ <b>𝐒ᴜᴘᴘᴏʀᴛ</b> ᴡɪᴛʜ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ ᴘʀᴏᴏғ.</blockquote>")
-        except: pass
+        except Exception as exc:
+            logger.warning("Deposit rejection user notification failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
         
         rej_text = (f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n"
                     f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"
@@ -483,7 +490,8 @@ def register_deposit(bot):
             await e.edit(conf_text)
             try:
                 await bot.send_message(int(credited_uid), f"<blockquote>{PE_CHECK} <b>🎉 𝐃ᴇᴘᴏsɪᴛ 𝐀ᴘᴘʀᴏᴠᴇᴅ!</b>\n\n{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ 𝐀ᴅᴅᴇᴅ:</b> <b>{P_INR}{amt}</b>\n📉 <b>𝐎ʟᴅ:</b> {P_INR}{prev_bal} | 📈 <b>𝐍ᴇᴡ:</b> <b>{new_bal}</b></blockquote>")
-            except: pass
+            except Exception as exc:
+                logger.warning("Custom deposit approval user notification failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
             await e.answer(f"✅ Approved ₹{amt} for user {credited_uid}.", alert=True)
             return
 

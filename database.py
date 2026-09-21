@@ -615,4 +615,9 @@ def record_redeemed_payment_db(email_msg_id, utr, txn_id, amount, user_id):
         """, (email_msg_id or "", utr or "", txn_id or "", amount, user_id))
         db.commit()
     except Exception as e:
-        logger.error(f"Error recording redeemed payment: {e}")
+        db.rollback()
+        logger.error(
+            "Recording redeemed payment failed: user_id=%s error_type=%s",
+            user_id, type(e).__name__, exc_info=True,
+        )
+        raise

@@ -135,7 +135,9 @@ async def channels_manager_menu(event):
         [style_btn("🔙 Back to Admin", "adm_adminmain", "danger", icon=6129812419028982717)]
     ]
     try: await event.edit(msg, buttons=btns)
-    except: await bot.send_message(event.chat_id, msg, buttons=btns)
+    except Exception as exc:
+        logger.warning("Admin settings message edit failed; using send fallback: error_type=%s", type(exc).__name__)
+        await bot.send_message(event.chat_id, msg, buttons=btns)
 
 async def run_stock_check(event):
     msg = await event.respond("🔄 <b>Checking Stock...</b>\nPlease wait, this may take a while.", parse_mode="html")
@@ -153,17 +155,18 @@ async def run_stock_check(event):
             if not await client.is_user_authorized():
                 raise Exception("Dead")
             alive += 1
-        except Exception:
+        except Exception as exc:
             dead += 1
+            logger.warning("Stock check account failed; removing unavailable entry: error_type=%s", type(exc).__name__)
             cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
             db.commit()
         finally:
             try: await client.disconnect()
-            except: pass
+            except Exception as exc: logger.debug("Stock check client disconnect failed: error_type=%s", type(exc).__name__)
         
         if (idx + 1) % 5 == 0:
             try: await msg.edit(f"🔄 <b>Checking Stock...</b> {idx+1}/{total}\n✅ Alive: {alive}\n❌ Dead: {dead}", parse_mode="html")
-            except: pass
+            except Exception as exc: logger.debug("Stock check progress update failed: error_type=%s", type(exc).__name__)
             
     await msg.edit(f"✅ <b>Stock Check Complete!</b>\n\nTotal Checked: {total}\n✅ Alive: {alive}\n❌ Dead (Removed): {dead}", parse_mode="html")
 
@@ -849,15 +852,17 @@ async def admin_actions(event):
                         try:
                             await bot.send_message(int(u_id), txt, buttons=btns, parse_mode='html')
                             s += 1
-                        except Exception:
+                        except Exception as exc:
+                            logger.warning("Broadcast retry failed: error_type=%s", type(exc).__name__)
                             f += 1
                     except (UserIsBlockedError, InputUserDeactivatedError):
                         f += 1
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning("Broadcast delivery failed: error_type=%s", type(exc).__name__)
                         f += 1
                     if (idx + 1) % 50 == 0:
                         try: await status_msg.edit(f"{P_TG} Broadcasting... {idx+1}/{total} (✅ {s} | ❌ {f})")
-                        except: pass
+                        except Exception as exc: logger.debug("Broadcast progress update failed: error_type=%s", type(exc).__name__)
                     await asyncio.sleep(0.05) 
                 await conv.send_message(f"{P_YES} Done! Sent: {s} | Failed: {f} | Total: {total}")
 
@@ -921,7 +926,8 @@ async def admin_actions(event):
                             cur.execute("INSERT OR REPLACE INTO users (user_id, balance, referred_by, total_deposited, joined_date, banned, discount, terms_accepted) VALUES (?,?,?,?,?,?,?,?)", 
                                         (int(row[0]), int(row[1]), row[2] if row[2] else None, int(row[3]), row[4], int(row[5]), int(row[6]), int(row[7])))
                             count += 1
-                        except: pass
+                        except Exception as exc:
+                            logger.warning("User restore row skipped: row_index=%s error_type=%s", reader.line_num, type(exc).__name__)
                 db.commit()
                 os.remove("temp_restore.csv")
                 await conv.send_message(f"{P_YES} Restored {count} users.")
