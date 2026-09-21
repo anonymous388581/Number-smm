@@ -44,11 +44,17 @@ async def finalize_stock_category(event, token, selection):
         return await event.answer("This stock operation has expired.", alert=True)
     if selection == "cancel":
         if draft["kind"] == "batch":
-            os.remove(draft["zip_path"])
-            shutil.rmtree(draft["extracted_dir"])
+            try:
+                if os.path.exists(draft["zip_path"]):
+                    os.remove(draft["zip_path"])
+                if os.path.isdir(draft["extracted_dir"]):
+                    shutil.rmtree(draft["extracted_dir"])
+            except OSError:
+                pass
         return await event.edit(f"{P_NO} Stock addition cancelled.")
 
     category = category_value(selection)
+    label = CATEGORY_LABELS[selection]
     if draft["kind"] == "single":
         data = draft["account"]
         cur.execute(
@@ -81,9 +87,18 @@ async def finalize_stock_category(event, token, selection):
             )
             success += 1
     db.commit()
-    os.remove(draft["zip_path"])
-    shutil.rmtree(draft["extracted_dir"])
-    await event.edit(f"{P_YES} <b>Bulk Interactive Upload Complete!</b>\n{P_ON} Added: {success}")
+    try:
+        if os.path.exists(draft["zip_path"]):
+            os.remove(draft["zip_path"])
+        if os.path.isdir(draft["extracted_dir"]):
+            shutil.rmtree(draft["extracted_dir"])
+    except OSError:
+        pass
+    await event.edit(
+        f"{P_YES} <b>Bulk Interactive Upload Complete!</b>\n"
+        f"{P_ON} Added: {success}\n"
+        f"🏷️ <b>Category:</b> {label}"
+    )
 
 async def channels_manager_menu(event):
     fsub_status = get_fsub_status()
