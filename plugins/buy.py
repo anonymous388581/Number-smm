@@ -152,6 +152,12 @@ FILTER_BADGES = {
     "bulk": "🌍 𝐒ᴛᴀɴᴅᴀʀᴅ"
 }
 
+def buy_navigation_row(back_callback):
+    return [
+        style_btn("⬅️ 𝐁ᴀᴄᴋ", back_callback, "primary", icon=6129627894349045589),
+        style_btn("🏠 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717),
+    ]
+
 async def show_filters_catalog(event, page=1):
     limit = 4
     offset = (page - 1) * limit
@@ -165,16 +171,16 @@ async def show_filters_catalog(event, page=1):
     btns = []
     for f_id, label, icon in items:
         if f_id == "aged":
-            btns.append([style_btn(label, b"by_years_menu", "primary", icon=icon)])
+            btns.append([style_btn(label, b"by_years_menu|filters", "primary", icon=icon)])
         else:
-            btns.append([style_btn(label, f"pg_c|{f_id}|1", "primary", icon=icon)])
+            btns.append([style_btn(label, f"pg_c|{f_id}|1|filters", "primary", icon=icon)])
 
     nav = []
     if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"pg_filters|{page-1}", "primary", icon=6129627894349045589))
     if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_filters|{page+1}", "primary", icon=6129732880529628243))
     if nav: btns.append(nav)
 
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)])
+    btns.append(buy_navigation_row(b"buy_menu_main"))
 
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -201,11 +207,11 @@ async def show_buy_menu(event):
     btns = [
         [style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ", b"search_country_btn", "primary", icon=5409098988156629257)],
         [
-            style_btn("🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ", b"pg_c|nonspam|1", "success", icon=5409320020058584473),
-            style_btn("🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)", b"pg_c|spam|1", "primary", icon=5408995930416362034)
+            style_btn("🟢 𝐍ᴏɴ-𝐒ᴘᴀᴍ / 𝐂ʟᴇᴀɴ", b"pg_c|nonspam|1|menu", "success", icon=5409320020058584473),
+            style_btn("🟡 𝐒ᴘᴀᴍ / 𝐔sᴇᴅ (𝐂ʜᴇᴀᴘ)", b"pg_c|spam|1|menu", "primary", icon=5408995930416362034)
         ],
-        [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs (𝐅ʀᴇsʜ & 𝐀ʟʟ)", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
-        [style_btn("🏛️ 𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs (ʙʏ 𝐘ᴇᴀʀ)", b"by_years_menu", "primary", icon=5408995930416362034)],
+        [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs (𝐅ʀᴇsʜ & 𝐀ʟʟ)", b"pg_c|bulk|1|menu", "primary", icon=6154249597532248059)],
+        [style_btn("🏛️ 𝐎ʟᴅ / 𝐀ɢᴇᴅ 𝐀ᴄᴄᴏᴜɴᴛs (ʙʏ 𝐘ᴇᴀʀ)", b"by_years_menu|menu", "primary", icon=5408995930416362034)],
         [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐃ᴀsʜʙᴏᴀʀᴅ", b"dashboard_main", "danger", icon=6129812419028982717)]
     ]
     if show_more_filters:
@@ -216,7 +222,7 @@ async def show_buy_menu(event):
     else:
         await event.respond(msg, buttons=btns)
 
-async def show_years_catalog(event):
+async def show_years_catalog(event, back_target="menu"):
     msg = (f"<blockquote>🏛️ <b>𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐘ᴇᴀʀ (𝐀ɢᴇ):</b>\n\n"
            f"<i>𝐀ɢᴇᴅ ᴀᴄᴄᴏᴜɴᴛs ʜᴀᴠᴇ ʜɪɢʜᴇʀ ᴛʀᴜsᴛ, ʟᴏᴡᴇʀ ʙᴀɴ ʀᴀᴛᴇs, ᴀɴᴅ ʟᴏɴɢᴇʀ ʜɪsᴛᴏʀʏ!</i></blockquote>")
     bot_mode = get_bot_mode()
@@ -233,8 +239,9 @@ async def show_years_catalog(event):
     btns = []
     for y in years:
         label = YEAR_BADGES.get(y, f"📅 {y}")
-        btns.append([style_btn(label, f"c_by_yr|{y}|1", "primary", icon=5408995930416362034)])
-    btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)])
+        btns.append([style_btn(label, f"c_by_yr|{y}|1|{back_target}", "primary", icon=5408995930416362034)])
+    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_menu_main"
+    btns.append(buy_navigation_row(back_callback))
     
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -242,7 +249,7 @@ async def show_years_catalog(event):
     else:
         await event.respond(msg, buttons=btns)
 
-async def show_countries_for_year(event, year, page):
+async def show_countries_for_year(event, year, page, back_target="menu"):
     limit = 10
     offset = (page - 1) * limit
     countries_all = await get_countries_list("bulk", year=year)
@@ -261,11 +268,12 @@ async def show_countries_for_year(event, year, page):
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
     nav = []
-    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"c_by_yr|{year}|{page-1}", "primary", icon=6129627894349045589))
-    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"c_by_yr|{year}|{page+1}", "primary", icon=6129732880529628243))
+    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"c_by_yr|{year}|{page-1}|{back_target}", "primary", icon=6129627894349045589))
+    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"c_by_yr|{year}|{page+1}|{back_target}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
-    f_btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐘ᴇᴀʀs", b"by_years_menu", "danger", icon=6129812419028982717)])
+    year_back_callback = b"by_years_menu" if back_target == "menu" else f"by_years_menu|{back_target}"
+    f_btns.append(buy_navigation_row(year_back_callback))
     
     total_pages = (total + limit - 1) // limit
     msg = f"<blockquote>🏛️ <b>𝐒ᴇʟᴇᴄᴛ 𝐂ᴏᴜɴᴛʀʏ ғᴏʀ {year} 𝐀ᴄᴄᴏᴜɴᴛs:</b> (𝐏ᴀɢᴇ {page}/{total_pages})</blockquote>"
@@ -274,7 +282,7 @@ async def show_countries_for_year(event, year, page):
         except MessageNotModifiedError: pass
     else: await event.respond(msg, buttons=f_btns)
 
-async def show_countries(event, mode, page):
+async def show_countries(event, mode, page, back_target="menu"):
     limit = 12
     offset = (page - 1) * limit
     countries_all = await get_countries_list(mode)
@@ -288,21 +296,18 @@ async def show_countries(event, mode, page):
     for c_name, count in countries:
         flag = get_flag_by_country_name(c_name)
         cnt_str = f"({count})" if count else "(40+)"
-        btns.append(style_btn(f"{flag} {c_name} {cnt_str}", f"bc|{mode}|{c_name}", "primary", icon=6154249597532248059))
+        btns.append(style_btn(f"{flag} {c_name} {cnt_str}", f"bc|{mode}|{c_name}|{back_target}", "primary", icon=6154249597532248059))
         
     f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
     
     nav = []
-    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"pg_c|{mode}|{page-1}", "primary", icon=6129627894349045589))
+    if page > 1: nav.append(style_btn("⬅️ 𝐏ʀᴇᴠ", f"pg_c|{mode}|{page-1}|{back_target}", "primary", icon=6129627894349045589))
     nav.append(style_btn("🔍 𝐒ᴇᴀʀᴄʜ", b"search_country_btn", "primary", icon=5409098988156629257))
-    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_c|{mode}|{page+1}", "primary", icon=6129732880529628243))
+    if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_c|{mode}|{page+1}|{back_target}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
-    back_row = []
-    if mode != 'bulk':
-        back_row.append(style_btn("🎯 𝐁ᴀᴄᴋ ᴛᴏ 𝐅ɪʟᴛᴇʀs", b"pg_filters|1", "primary", icon=5409320020058584473))
-    back_row.append(style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717))
-    f_btns.append(back_row)
+    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_menu_main"
+    f_btns.append(buy_navigation_row(back_callback))
     
     total_pages = (total + limit - 1) // limit
     if mode in FILTER_BADGES and mode != 'bulk':
@@ -316,7 +321,7 @@ async def show_countries(event, mode, page):
         except MessageNotModifiedError: pass
     else: await event.respond(msg, buttons=f_btns)
 
-async def show_years(event, mode, country):
+async def show_years(event, mode, country, back_target="menu"):
     if "|" in country:
         parts = country.split("|")
         country = parts[-1].strip()
@@ -379,9 +384,9 @@ async def show_years(event, mode, country):
         btns.append([style_btn(f"{badge} — {P_INR}{price} {cnt_text}", f"by|{mode}|{country}|{y}|{price}", "primary", icon=5408995930416362034)])
     
     if mode != 'bulk':
-        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐂ᴏᴜɴᴛʀɪᴇs", f"pg_c|{mode}|1", "danger", icon=6129812419028982717)])
+        btns.append(buy_navigation_row(f"pg_c|{mode}|1|{back_target}"))
     else:
-        btns.append([style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐂ᴏᴜɴᴛʀɪᴇs", "pg_c|bulk|1", "danger", icon=6129812419028982717)])
+        btns.append(buy_navigation_row(f"pg_c|bulk|1|{back_target}"))
     
     if mode in FILTER_BADGES and mode != 'bulk':
         cat_label = f" ({FILTER_BADGES[mode]})"
@@ -728,9 +733,10 @@ def register_buy(bot):
     async def cb_open_buy_categories(e):
         await show_buy_menu(e)
 
-    @bot.on(events.CallbackQuery(pattern=b"^by_years_menu$"))
+    @bot.on(events.CallbackQuery(pattern=r"^by_years_menu(?:\|([^|]+))?$"))
     async def cb_by_years_menu(e):
-        await show_years_catalog(e)
+        back_target = e.pattern_match.group(1)
+        await show_years_catalog(e, back_target.decode() if back_target else "menu")
 
     @bot.on(events.CallbackQuery(pattern=r"^pg_filters\|(\d+)$"))
     async def cb_pg_filters(e):
@@ -738,22 +744,25 @@ def register_buy(bot):
         page = int(p.group(1).decode())
         await show_filters_catalog(e, page)
 
-    @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)$"))
+    @bot.on(events.CallbackQuery(pattern=r"^c_by_yr\|(\d+)\|(\d+)(?:\|([^|]+))?$"))
     async def cb_c_by_yr(e):
         p = e.pattern_match
         year = int(p.group(1).decode())
         page = int(p.group(2).decode())
-        await show_countries_for_year(e, year, page)
+        back_target = p.group(3).decode() if p.group(3) else "menu"
+        await show_countries_for_year(e, year, page, back_target)
 
-    @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|([^|]+)$"))
+    @bot.on(events.CallbackQuery(pattern=r"^bc\|([^|]+)\|([^|]+)(?:\|([^|]+))?$"))
     async def cb_bc(e):
         p = e.pattern_match
-        await show_years(e, p.group(1).decode(), p.group(2).decode())
+        back_target = p.group(3).decode() if p.group(3) else "menu"
+        await show_years(e, p.group(1).decode(), p.group(2).decode(), back_target)
 
-    @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)$"))
+    @bot.on(events.CallbackQuery(pattern=r"^pg_c\|([^|]+)\|(\d+)(?:\|([^|]+))?$"))
     async def cb_pg_c(e):
         p = e.pattern_match
-        await show_countries(e, p.group(1).decode(), int(p.group(2).decode()))
+        back_target = p.group(3).decode() if p.group(3) else "menu"
+        await show_countries(e, p.group(1).decode(), int(p.group(2).decode()), back_target)
 
     @bot.on(events.CallbackQuery(pattern=r"^by\|([^|]+)\|([^|]+)\|(\d+)\|(\d+)$"))
     async def cb_by_single(e):
