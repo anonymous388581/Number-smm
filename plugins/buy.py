@@ -180,7 +180,7 @@ async def show_filters_catalog(event, page=1):
     if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_filters|{page+1}", "primary", icon=6129732880529628243))
     if nav: btns.append(nav)
 
-    btns.append(buy_navigation_row(b"buy_menu_main"))
+    btns.append(buy_navigation_row(b"buy_back_main"))
 
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
@@ -240,7 +240,7 @@ async def show_years_catalog(event, back_target="menu"):
     for y in years:
         label = YEAR_BADGES.get(y, f"📅 {y}")
         btns.append([style_btn(label, f"c_by_yr|{y}|1|{back_target}", "primary", icon=5408995930416362034)])
-    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_menu_main"
+    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_back_main"
     btns.append(buy_navigation_row(back_callback))
     
     if isinstance(event, events.CallbackQuery.Event):
@@ -306,7 +306,7 @@ async def show_countries(event, mode, page, back_target="menu"):
     if offset + limit < total: nav.append(style_btn("𝐍ᴇxᴛ ➡️", f"pg_c|{mode}|{page+1}|{back_target}", "primary", icon=6129732880529628243))
     if nav: f_btns.append(nav)
     
-    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_menu_main"
+    back_callback = b"pg_filters|1" if back_target == "filters" else b"buy_back_main"
     f_btns.append(buy_navigation_row(back_callback))
     
     total_pages = (total + limit - 1) // limit
@@ -509,7 +509,7 @@ async def process_purchase(event, mode, country, year, price_str):
                 async with get_user_lock(uid):
                     cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
                     db.commit()
-                return await event.edit(f"<blockquote>{P_NO} <b>❌ 𝐎ᴜᴛ ᴏғ 𝐒ᴛᴏᴄᴋ!</b>\n\n𝐍ᴏ ᴀᴄᴄᴏᴜɴᴛs ᴀʀᴇ ᴄᴜʀʀᴇɴᴛʟʏ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ <b>{c_icon} {country}</b>.\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{final_price}</b>) ʜᴀs ʙᴇᴇɴ <b>ɪɴsᴛᴀɴᴛʟʏ ʀᴇғᴜɴᴅᴇᴅ</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐂ᴏᴜɴᴛʀʏ", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                return await event.edit(f"<blockquote>{P_NO} <b>❌ 𝐎ᴜᴛ ᴏғ 𝐒ᴛᴏᴄᴋ!</b>\n\n𝐍ᴏ ᴀᴄᴄᴏᴜɴᴛs ᴀʀᴇ ᴄᴜʀʀᴇɴᴛʟʏ ᴀᴠᴀɪʟᴀʙʟᴇ ғᴏʀ <b>{c_icon} {country}</b>.\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{final_price}</b>) ʜᴀs ʙᴇᴇɴ <b>ɪɴsᴛᴀɴᴛʟʏ ʀᴇғᴜɴᴅᴇᴅ</b>.</blockquote>", buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐂ᴏᴜɴᴛʀʏ", "buy_back_main", "primary", icon=5408995930416362034)]])
 
             buy_success = False
             bought_info = None
@@ -733,6 +733,10 @@ def register_buy(bot):
     async def cb_open_buy_categories(e):
         await show_buy_menu(e)
 
+    @bot.on(events.CallbackQuery(pattern=b"^buy_back_main$"))
+    async def cb_buy_back_main(e):
+        await show_buy_menu(e)
+
     @bot.on(events.CallbackQuery(pattern=r"^by_years_menu(?:\|([^|]+))?$"))
     async def cb_by_years_menu(e):
         back_target = e.pattern_match.group(1)
@@ -805,7 +809,7 @@ def register_buy(bot):
             db.commit()
             
         msg = f"<blockquote>{P_NO} <b>❌ 𝐎ʀᴅᴇʀ 𝐂ᴀɴᴄᴇʟʟᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴍᴏɴᴇʏ (<b>{P_INR}{refund_amt}</b>) ʜᴀs ʙᴇᴇɴ <b>ɪɴsᴛᴀɴᴛʟʏ ʀᴇғᴜɴᴅᴇᴅ</b> ᴛᴏ ʏᴏᴜʀ ʙᴀʟᴀɴᴄᴇ.</blockquote>"
-        await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɢᴀɪɴ", "buy_menu_main", "primary", icon=5408995930416362034)]])
+        await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɢᴀɪɴ", "buy_back_main", "primary", icon=5408995930416362034)]])
         await e.answer("✅ Order Cancelled & Refunded!", alert=True)
 
     @bot.on(events.CallbackQuery(pattern=r"^get_otp_again\|([^|]+)$"))
@@ -861,7 +865,7 @@ def register_buy(bot):
                 for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
                     if os.path.exists(order['sess'] + ext): os.remove(order['sess'] + ext)
             msg = f"<blockquote>{PE_CHECK} <b>🎉 𝐎ʀᴅᴇʀ 𝐂ᴏᴍᴘʟᴇᴛᴇᴅ!</b>\n\n𝐓ʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ʏᴏᴜʀ ᴘᴜʀᴄʜᴀsᴇ. 𝐘ᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ɪs ʀᴇᴀᴅʏ ᴛᴏ ᴜsᴇ!</blockquote>"
-            await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_menu_main", "primary", icon=5408995930416362034)]])
+            await e.edit(msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_back_main", "primary", icon=5408995930416362034)]])
         else:
             await e.answer("✅ Order already completed.", alert=True)
 
@@ -871,7 +875,7 @@ def register_buy(bot):
         search_state[uid] = True
         msg = (f"<blockquote>🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐂ᴏᴜɴᴛʀʏ:</b>\n\n"
                f"𝐏ʟᴇᴀsᴇ ᴛʏᴘᴇ ᴛʜᴇ <b>𝐂ᴏᴜɴᴛʀʏ 𝐍ᴀᴍᴇ</b> (ᴇ.ɢ. <i>India, Brazil, Russia, France</i>) ᴏʀ <b>𝐃ɪᴀʟɪɴɢ 𝐂ᴏᴅᴇ</b> (ᴇ.ɢ. <i>+91, +55, +7</i>) ʙᴇʟᴏᴡ:</blockquote>")
-        btns = [[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)]]
+        btns = [[style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_back_main", "danger", icon=6129812419028982717)]]
         try: await e.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
 
@@ -894,7 +898,7 @@ def register_buy(bot):
             f_btns = [btns[i:i+2] for i in range(0, len(btns), 2)]
             f_btns.append([
                 style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐀ɢᴀɪɴ", b"search_country_btn", "primary", icon=5409098988156629257),
-                style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)
+                style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_back_main", "danger", icon=6129812419028982717)
             ])
             msg = (f"<blockquote>🔍 <b>𝐒ᴇᴀʀᴄʜ 𝐑ᴇsᴜʟᴛs ғᴏʀ:</b> <code>{html.escape(query)}</code>\n\n"
                    f"𝐅ᴏᴜɴᴅ <b>{len(matches)}</b> ᴍᴀᴛᴄʜɪɴɢ ᴄᴏᴜɴᴛʀɪᴇs:</blockquote>")
@@ -903,7 +907,7 @@ def register_buy(bot):
             f_btns = [
                 [style_btn("🔍 𝐒ᴇᴀʀᴄʜ 𝐀ɢᴀɪɴ", b"search_country_btn", "primary", icon=5409098988156629257)],
                 [style_btn("🌍 𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs", b"pg_c|bulk|1", "primary", icon=6154249597532248059)],
-                [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_menu_main", "danger", icon=6129812419028982717)]
+                [style_btn("🔙 𝐁ᴀᴄᴋ ᴛᴏ 𝐌ᴇɴᴜ", b"buy_back_main", "danger", icon=6129812419028982717)]
             ]
             msg = (f"<blockquote>❌ <b>𝐍ᴏ ᴄᴏᴜɴᴛʀɪᴇs ғᴏᴜɴᴅ ᴍᴀᴛᴄʜɪɴɢ:</b> <code>{html.escape(query)}</code>\n\n"
                    f"𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ sᴘᴇʟʟɪɴɢ ᴏʀ ʙʀᴏᴡsᴇ <b>𝐀ʟʟ 𝐂ᴏᴜɴᴛʀɪᴇs</b>.</blockquote>")
@@ -1061,7 +1065,7 @@ def register_buy(bot):
                     f"✅ <b>𝐓ʜᴇ ᴀᴄᴄᴏᴜɴᴛ ɪs ɴᴏᴡ 100% ᴍɪɢʀᴀᴛᴇᴅ ᴛᴏ ʏᴏᴜʀ ɴᴇᴡ ɴᴜᴍʙᴇʀ!</b>\n"
                     f"𝐘ᴏᴜ ᴄᴀɴ ɴᴏᴡ ʟᴏɢɪɴ ᴅɪʀᴇᴄᴛʟʏ ᴜsɪɴɢ ʏᴏᴜʀ ᴏᴡɴ ɴᴜᴍʙᴇʀ (<code>{new_phone}</code>).</blockquote>"
                 )
-                await loading.edit(success_msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_menu_main", "primary", icon=5408995930416362034)]])
+                await loading.edit(success_msg, buttons=[[style_btn("🛒 𝐁ᴜʏ 𝐀ɴᴏᴛʜᴇʀ 𝐀ᴄᴄᴏᴜɴᴛ", "buy_back_main", "primary", icon=5408995930416362034)]])
             except PhoneCodeInvalidError:
                 await loading.edit(f"<blockquote>{P_NO} <b>❌ 𝐈ɴᴠᴀʟɪᴅ 𝐎𝐓𝐏 𝐂ᴏᴅᴇ!</b>\n𝐏ʟᴇᴀsᴇ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴄᴏᴅᴇ ᴀɴᴅ sᴇɴᴅ ɪᴛ ᴀɢᴀɪɴ.</blockquote>")
             except PhoneCodeExpiredError:

@@ -75,6 +75,12 @@ class MoreAccountFiltersTests(unittest.TestCase):
             asyncio.run(buy.show_countries(event, mode, 1, back_target))
         return event
 
+    def test_buy_navigation_row_separates_parent_and_dashboard_destinations(self):
+        self.assertEqual(
+            self.callbacks(buy.buy_navigation_row("buy_back_main")),
+            ["buy_back_main", "dashboard_main"],
+        )
+
     def test_manual_more_filters_button_is_present_when_on(self):
         message, callbacks = self.menu("manual", True)
         self.assertIn("pg_filters|1", callbacks)
@@ -90,7 +96,7 @@ class MoreAccountFiltersTests(unittest.TestCase):
         event = self.render_countries("nonspam", "menu")
         self.assertEqual(
             self.callbacks(event.buttons[-1]),
-            ["buy_menu_main", "dashboard_main"],
+            ["buy_back_main", "dashboard_main"],
         )
 
     def test_country_page_from_filters_has_back_and_dashboard(self):
@@ -105,7 +111,7 @@ class MoreAccountFiltersTests(unittest.TestCase):
             event = self.render_countries("nonspam", "menu")
             self.assertEqual(
                 self.callbacks(event.buttons[-1]),
-                ["buy_menu_main", "dashboard_main"],
+                ["buy_back_main", "dashboard_main"],
                 bot_mode,
             )
 
@@ -123,7 +129,7 @@ class MoreAccountFiltersTests(unittest.TestCase):
         asyncio.run(buy.show_filters_catalog(event))
         self.assertEqual(
             self.callbacks(event.buttons[-1]),
-            ["buy_menu_main", "dashboard_main"],
+            ["buy_back_main", "dashboard_main"],
         )
 
     def test_aged_year_catalog_from_filters_returns_to_filters(self):

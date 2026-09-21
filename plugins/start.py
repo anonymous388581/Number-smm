@@ -89,7 +89,7 @@ async def send_main_menu(bot, event, uid):
 
 
 def register_start(bot):
-    @bot.on(events.CallbackQuery(pattern=r"^(dashboard_main|back_to_dashboard|buy_menu_main)$"))
+    @bot.on(events.CallbackQuery(pattern=r"^(dashboard_main|back_to_dashboard)$"))
     async def cb_dashboard_main(e):
         await send_main_menu(bot, e, e.sender_id)
 
