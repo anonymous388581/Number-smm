@@ -24,7 +24,7 @@ SCHEMA_COLUMNS = {
     "settings": ["key", "value"],
     "stock": ["phone", "session_file", "country_name", "country_icon", "account_year", "category", "price", "available", "twofa", "added_date"],
     "auto_prices": ["country", "year", "price"], "spamfree_prices": ["country", "price"],
-    "deposits": ["id", "user_id", "amount", "method_name", "status", "date"],
+    "deposits": ["id", "user_id", "amount", "method_name", "payment_method", "screenshot_file_id", "source_chat_id", "source_message_id", "status", "created_at", "date"],
     "upi_orders": ["order_id", "user_id", "amount", "status", "date"],
     "orders": ["id", "user_id", "country", "year", "price", "phone", "otp", "date"],
     "custom_payments": ["id", "name", "caption", "qr_file_id"],

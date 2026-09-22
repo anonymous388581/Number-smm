@@ -5,7 +5,7 @@ import urllib.parse
 import io
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_usdt_rate, update_balance, approve_deposit, to_usd, get_log_channels_db, is_admin
+from database import cur, db, get_usdt_rate, update_balance, approve_deposit, to_usd, get_log_channels_db, is_admin, repository
 from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
@@ -202,7 +202,10 @@ def register_deposit(bot):
     @bot.on(events.NewMessage(func=lambda e: e.sender_id in waiting_proof and (e.photo or e.document or e.media or (e.text and not e.text.startswith('/')))))
     async def msg_wait_proof(e):
         uid = e.sender_id
-        info = waiting_proof.pop(uid)
+        info = waiting_proof.get(uid)
+        if not info:
+            logger.warning("Manual deposit proof received without pending state: user_id=%s message_id=%s", uid, e.id)
+            return await e.reply("⚠️ Your deposit session has expired. Please start Manual Deposit again.")
         final_amt = info['amount']
         if info['method'] == "Cwallet": final_amt = int(final_amt * 1.05)
         
@@ -293,9 +296,22 @@ def register_deposit(bot):
                     return
 
         # 2. MANUAL SCREENSHOT / PROOF FLOW
-        cur.execute("INSERT INTO deposits (user_id, amount, method_name, status) VALUES (?,?,?,?)", (uid, final_amt, info['method'], "pending"))
-        db.commit()
-        dep_id = cur.lastrowid
+        screenshot_file_id = getattr(getattr(e, "file", None), "id", None)
+        try:
+            deposit, created = repository.create_manual_deposit(
+                uid, final_amt, info['method'], screenshot_file_id,
+                e.chat_id or uid, e.id,
+            )
+        except Exception:
+            waiting_proof[uid] = info
+            logger.exception("Manual deposit MongoDB write failed: user_id=%s message_id=%s", uid, e.id)
+            return await e.reply("❌ We could not submit your deposit right now. Please try again.")
+
+        waiting_proof.pop(uid, None)
+        dep_id = deposit["_id"]
+        if not created:
+            logger.info("Duplicate manual deposit proof ignored: user_id=%s message_id=%s deposit_id=%s", uid, e.id, dep_id)
+            return await e.reply("⏳ This deposit screenshot has already been submitted for review.")
         
         await e.reply(f"<blockquote>{PE_GIFT} <b>𝐃ᴇᴘᴏsɪᴛ ʀᴇǫᴜᴇsᴛ sᴜʙᴍɪᴛᴛᴇᴅ!</b>\n\n⏳ 𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴀɴ ᴀᴅᴍɪɴ ᴠᴇʀɪғɪᴇs ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ. 𝐘ᴏᴜʀ ʙᴀʟᴀɴᴄᴇ ᴡɪʟʟ ʙᴇ ᴄʀᴇᴅɪᴛᴇᴅ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ!</blockquote>")
         
@@ -345,11 +361,14 @@ def register_deposit(bot):
                             await bot.send_file(a_id, e.media, caption=f"🔔 <b>[FALLBACK PAYMENT APPROVAL]</b>\n{cap}", buttons=btns)
                         else:
                             await bot.send_message(a_id, f"🔔 <b>[FALLBACK PAYMENT APPROVAL]</b>\n{cap}", buttons=btns)
+                        delivered = True
                         break  # Delivered to admin PM
                     except Exception as exc:
                         logger.warning("Payment approval fallback delivery failed: attempt=%s error_type=%s", admin_ids.index(a_id) + 1, type(exc).__name__)
             except Exception as e_adm:
                 logger.error(f"Error sending fallback deposit to admin DM: {e_adm}")
+            if not delivered:
+                logger.error("Manual deposit admin notification failed: deposit_id=%s user_id=%s", dep_id, uid)
 
     @bot.on(events.CallbackQuery(pattern=r"^dep_acc\|"))
     async def cb_dep_acc(e):

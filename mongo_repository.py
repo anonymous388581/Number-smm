@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 
 COLLECTIONS = (
@@ -57,6 +58,7 @@ class MongoRepository:
         for collection, fields in indexes.items():
             for field, direction in fields:
                 self.db[collection].create_index([(field, direction)])
+        self.db.deposits.create_index([("source_key", ASCENDING)], unique=True, sparse=True)
 
     @staticmethod
     def _now():
@@ -155,6 +157,36 @@ class MongoRepository:
                     "previous_balance": user["balance"] - amount,
                     "balance": user["balance"], "amount": amount, "status": "approved"}
 
+    def create_manual_deposit(self, user_id, amount, method, screenshot_file_id,
+                              source_chat_id, source_message_id):
+        """Create one pending manual deposit, deduplicated by Telegram update."""
+        source_key = f"{int(source_chat_id)}:{int(source_message_id)}"
+        existing = self.db.deposits.find_one({"source_key": source_key})
+        if existing is not None:
+            return existing, False
+
+        document = {
+            "_id": self.next_id("deposits"),
+            "id": None,
+            "user_id": int(user_id),
+            "amount": int(amount),
+            "method_name": method,
+            "payment_method": method,
+            "screenshot_file_id": screenshot_file_id,
+            "source_chat_id": int(source_chat_id),
+            "source_message_id": int(source_message_id),
+            "source_key": source_key,
+            "status": "pending",
+            "created_at": self._now(),
+            "date": self._now(),
+        }
+        document["id"] = document["_id"]
+        try:
+            self.db.deposits.insert_one(document)
+        except DuplicateKeyError:
+            return self.db.deposits.find_one({"source_key": source_key}), False
+        return document, True
+
     def set_setting(self, key, value):
         self.db.settings.update_one({"_id": key}, {"$set": {"key": key, "value": value}}, upsert=True)
 
@@ -163,7 +195,7 @@ class MongoRepository:
         return row.get("value", default) if row else default
 
     def next_id(self, collection):
-        result = self.db._sequences.find_one_and_update(
+        result = self.db["_sequences"].find_one_and_update(
             {"_id": collection}, {"$inc": {"value": 1}},
             upsert=True, return_document=ReturnDocument.AFTER,
         )
