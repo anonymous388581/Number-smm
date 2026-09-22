@@ -7,6 +7,7 @@ surface into Mongo operations.
 
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
@@ -244,6 +245,8 @@ class MongoCursor:
             if key not in document or document[key] is None:
                 document[key] = self.repository.next_id(table)
             document["_id"] = document[key]
+        if "date" in SCHEMA_COLUMNS.get(table, ()) and "date" not in document:
+            document["date"] = datetime.now(timezone.utc)
         if "OR IGNORE" in statement.upper():
             self.repository.db[table].update_one({"_id": document["_id"]}, {"$setOnInsert": document}, upsert=True)
         else:

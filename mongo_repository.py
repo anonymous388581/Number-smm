@@ -90,6 +90,14 @@ class MongoRepository:
             return_document=ReturnDocument.AFTER,
         )
 
+    def upsert_stock_account(self, account):
+        """Persist one manual account directly in the Mongo stock collection."""
+        document = dict(account)
+        document["_id"] = document["phone"]
+        document.setdefault("added_date", self._now())
+        self.db.stock.replace_one({"_id": document["_id"]}, document, upsert=True)
+        return document
+
     def claim_stock_account(self, mode="bulk", country=None, year=None):
         query = {"available": 1}
         if country is not None:

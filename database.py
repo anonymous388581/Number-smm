@@ -22,6 +22,9 @@ class MongoRuntime:
     def rollback(self):
         return None
 
+    def upsert_stock_account(self, account):
+        return self.repository.upsert_stock_account(account)
+
 
 db = MongoRuntime()
 

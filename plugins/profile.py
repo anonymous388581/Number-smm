@@ -4,6 +4,12 @@ from database import cur, to_usd
 from config import PE_KISS, PE_CROWN, PE_FLOWER, P_ID, P_MONEY, P_CARD, P_USERS, P_CAL, P_GIFT, P_CART, P_USDT, P_PHONE
 from datetime import datetime
 
+
+def format_date(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(value or "")
+
 async def profile_handler(bot, event):
     uid = event.sender_id
     row = cur.execute("SELECT balance, total_deposited, joined_date, discount FROM users WHERE user_id=?", (uid,)).fetchone()
@@ -25,7 +31,7 @@ async def profile_handler(bot, event):
            f"{P_MONEY} 𝐁ᴀʟᴀɴᴄᴇ: <tg-spoiler><code>${to_usd(bal):.2f} (₹{bal})</code></tg-spoiler>\n"
            f"{P_CARD} 𝐃ᴇᴘᴏsɪᴛᴇᴅ: <code>${to_usd(dep):.2f} (₹{dep})</code>{disc_msg}\n"
            f"{P_USERS} 𝐑ᴇғᴇʀʀᴇᴅ 𝐔sᴇʀs: <b>{ref_count}</b>\n"
-           f"{P_CAL} 𝐉ᴏɪɴᴇᴅ: {date[:10]}</blockquote>\n\n"
+           f"{P_CAL} 𝐉ᴏɪɴᴇᴅ: {format_date(date)[:10]}</blockquote>\n\n"
            f"<blockquote>{ref_block}</blockquote>\n"
            f"<blockquote><i>(𝐒ʜᴀʀᴇ ᴛʜɪs ʟɪɴᴋ ᴡɪᴛʜ ʏᴏᴜʀ ғʀɪᴇɴᴅs ᴛᴏ ᴇᴀʀɴ ʙᴏɴᴜsᴇs!)</i></blockquote>")
     await bot.send_message(event.chat_id, msg)
@@ -68,7 +74,7 @@ async def send_purchase_page(event, uid, page):
                 dt = datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
                 d_str = dt.strftime("%a %b %d %H:%M:%S %Y")
             except:
-                d_str = d
+                d_str = format_date(d)
             msg += f"<blockquote>{P_PHONE} {ph}\n{P_CAL} {d_str}\n────────────────</blockquote>\n"
             
     nav = []

@@ -57,12 +57,23 @@ async def finalize_stock_category(event, token, selection):
     label = CATEGORY_LABELS[selection]
     if draft["kind"] == "single":
         data = draft["account"]
-        cur.execute(
-            "INSERT OR REPLACE INTO stock "
-            "(phone, session_file, country_name, country_icon, account_year, category, "
-            "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
-            (data[0], data[1], data[2], data[3], data[4], category, data[5], data[6], data[7]),
-        )
+        account = {
+            "phone": data[0], "session_file": data[1], "country_name": data[2],
+            "country_icon": data[3], "account_year": data[4], "category": category,
+            "price": data[5], "available": data[6], "twofa": data[7],
+        }
+        if hasattr(db, "upsert_stock_account"):
+            db.upsert_stock_account(account)
+        else:
+            cur.execute(
+                "INSERT OR REPLACE INTO stock "
+                "(phone, session_file, country_name, country_icon, account_year, category, "
+                "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
+                tuple(account[field] for field in (
+                    "phone", "session_file", "country_name", "country_icon",
+                    "account_year", "category", "price", "available", "twofa",
+                )),
+            )
         db.commit()
         label = CATEGORY_LABELS[selection]
         return await event.edit(
@@ -79,12 +90,23 @@ async def finalize_stock_category(event, token, selection):
             for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
                 if os.path.exists(acc['path'] + ext):
                     shutil.move(acc['path'] + ext, perm_base + ext)
-            cur.execute(
-                "INSERT OR REPLACE INTO stock "
-                "(phone, session_file, country_name, country_icon, account_year, category, "
-                "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
-                (acc['phone'], perm_base + ".session", c_name, c_icon, year, category, price, 1, twofa_pass),
-            )
+            account = {
+                "phone": acc["phone"], "session_file": perm_base + ".session",
+                "country_name": c_name, "country_icon": c_icon, "account_year": year,
+                "category": category, "price": price, "available": 1, "twofa": twofa_pass,
+            }
+            if hasattr(db, "upsert_stock_account"):
+                db.upsert_stock_account(account)
+            else:
+                cur.execute(
+                    "INSERT OR REPLACE INTO stock "
+                    "(phone, session_file, country_name, country_icon, account_year, category, "
+                    "price, available, twofa) VALUES (?,?,?,?,?,?,?,?,?)",
+                    tuple(account[field] for field in (
+                        "phone", "session_file", "country_name", "country_icon",
+                        "account_year", "category", "price", "available", "twofa",
+                    )),
+                )
             success += 1
     db.commit()
     try:

@@ -32,6 +32,28 @@ class MongoRuntimeTests(unittest.TestCase):
         self.assertIsNone(self.repository.claim_stock_account("nonspam", country="India"))
         self.assertEqual(self.repository.claim_stock_account("spam", country="India")["phone"], "spam")
 
+    def test_manual_stock_survives_repository_restart(self):
+        self.repository.upsert_stock_account({
+            "phone": "restart-stock",
+            "session_file": "sessions/restart-stock.session",
+            "country_name": "India",
+            "country_icon": "",
+            "account_year": 2026,
+            "category": "Good",
+            "price": 100,
+            "available": 1,
+            "twofa": "None",
+        })
+
+        restarted = MongoRepository(client=self.client, database_name="runtime_test")
+        account = restarted.db.stock.find_one({"phone": "restart-stock"})
+        self.assertIsNotNone(account)
+        self.assertEqual(account["category"], "Good")
+        self.assertEqual(account["country_name"], "India")
+        self.assertEqual(account["account_year"], 2026)
+        self.assertEqual(account["available"], 1)
+        self.assertIn("added_date", account)
+
     def test_stock_category_filters_preserve_country_year_and_availability(self):
         self.repository.db.stock.insert_many([
             {"_id": "clean-india", "phone": "clean-india", "country_name": "India", "account_year": 2026,
