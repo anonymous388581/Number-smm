@@ -157,6 +157,31 @@ class MongoRepository:
                     "previous_balance": user["balance"] - amount,
                     "balance": user["balance"], "amount": amount, "status": "approved"}
 
+    def get_deposit(self, deposit_id):
+        """Find a deposit by its integer callback ID."""
+        try:
+            normalized_id = int(deposit_id)
+        except (TypeError, ValueError):
+            return None
+        return self.db.deposits.find_one({"_id": normalized_id})
+
+    def reject_deposit(self, deposit_id):
+        with self.transaction() as session:
+            deposit = self.db.deposits.find_one_and_update(
+                {"_id": int(deposit_id), "status": "pending"},
+                {"$set": {"status": "rejected"}},
+                session=session, return_document=ReturnDocument.BEFORE,
+            )
+            if deposit is None:
+                existing = self.db.deposits.find_one({"_id": int(deposit_id)}, session=session)
+                if existing:
+                    return {"rejected": False, "already_processed": True,
+                            "user_id": existing.get("user_id"), "amount": existing.get("amount")}
+                raise ValueError(f"deposit {deposit_id} does not exist")
+            return {"rejected": True, "already_processed": False,
+                    "user_id": deposit.get("user_id"), "amount": deposit.get("amount"),
+                    "status": "rejected"}
+
     def create_manual_deposit(self, user_id, amount, method, screenshot_file_id,
                               source_chat_id, source_message_id):
         """Create one pending manual deposit, deduplicated by Telegram update."""

@@ -1,4 +1,6 @@
 import unittest
+from contextlib import nullcontext
+from unittest.mock import patch
 
 import mongomock
 
@@ -94,6 +96,58 @@ class MongoRuntimeTests(unittest.TestCase):
         restarted = MongoRepository(client=self.client, database_name="runtime_test")
         self.assertEqual(restarted.get_setting("bot_mode"), "hybrid")
         self.assertEqual(restarted.get_setting("lzt_api_key"), "stored-key")
+
+    def test_manual_deposit_is_pending_and_callback_id_is_normalized(self):
+        self.repository.ensure_user(101)
+        deposit, created = self.repository.create_manual_deposit(
+            101, 250, "ManualUPI", "file-1", 101, 9001,
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(deposit["status"], "pending")
+        self.assertEqual(deposit["_id"], deposit["id"])
+        self.assertEqual(deposit["source_chat_id"], 101)
+        self.assertEqual(deposit["source_message_id"], 9001)
+        self.assertIsNone(deposit.get("processed"))
+        stored = self.repository.get_deposit(str(deposit["id"]))
+        self.assertEqual(stored["_id"], deposit["id"])
+        self.assertEqual(stored["user_id"], 101)
+        self.assertEqual(stored["amount"], 250)
+        self.assertEqual(stored["status"], "pending")
+
+    def test_manual_deposit_accept_and_custom_amount_are_one_time(self):
+        self.repository.ensure_user(101)
+        exact, _ = self.repository.create_manual_deposit(101, 250, "ManualUPI", "file-1", 101, 9001)
+        custom, _ = self.repository.create_manual_deposit(101, 300, "ManualUPI", "file-2", 101, 9002)
+
+        with patch.object(self.repository, "transaction", return_value=nullcontext(None)):
+            accepted = self.repository.approve_deposit(str(exact["id"]), 250)
+            duplicate_accept = self.repository.approve_deposit(exact["id"], 250)
+            custom_approved = self.repository.approve_deposit(custom["id"], 275)
+
+        self.assertTrue(accepted["approved"])
+        self.assertTrue(duplicate_accept["already_processed"])
+        self.assertTrue(custom_approved["approved"])
+        self.assertEqual(self.repository.db.deposits.find_one({"_id": exact["id"]})["status"], "approved")
+        self.assertEqual(self.repository.db.deposits.find_one({"_id": custom["id"]})["amount"], 275)
+        self.assertEqual(self.repository.get_user(101)["balance"], 525)
+
+    def test_manual_deposit_reject_is_one_time_and_isolated(self):
+        self.repository.ensure_user(101)
+        self.repository.ensure_user(202)
+        rejected, _ = self.repository.create_manual_deposit(101, 250, "ManualUPI", "file-1", 101, 9001)
+        other, _ = self.repository.create_manual_deposit(202, 400, "ManualUPI", "file-2", 202, 9002)
+
+        with patch.object(self.repository, "transaction", return_value=nullcontext(None)):
+            rejection = self.repository.reject_deposit(str(rejected["id"]))
+            duplicate_rejection = self.repository.reject_deposit(rejected["id"])
+
+        self.assertTrue(rejection["rejected"])
+        self.assertTrue(duplicate_rejection["already_processed"])
+        self.assertEqual(self.repository.get_deposit(rejected["id"])["status"], "rejected")
+        self.assertEqual(self.repository.get_deposit(other["id"])["status"], "pending")
+        self.assertEqual(self.repository.get_user(101)["balance"], 0)
+        self.assertEqual(self.repository.get_user(202)["balance"], 0)
 
 
 if __name__ == "__main__":

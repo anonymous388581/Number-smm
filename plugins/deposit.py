@@ -69,6 +69,9 @@ def get_admin_custom_keypad(dep_id):
         [style_btn("𝐂ᴀɴᴄᴇʟ", f"dkp|{dep_id}|cancel", "danger", icon=6129888444245089008)]
     ]
 
+def get_manual_deposit(deposit_id):
+    return repository.get_deposit(deposit_id)
+
 # We will skip the automated UPI part in this script to save space if needed, 
 # or I can port it directly. The user had a keypad logic for UPI amounts.
 def get_keypad():
@@ -379,11 +382,11 @@ def register_deposit(bot):
         p = e.data.decode().split("|")
         dep_id, t_uid, method, a_type = p[1], int(p[2]), p[3], p[4]
         
-        row = cur.execute("SELECT user_id, status, amount FROM deposits WHERE id=?", (dep_id,)).fetchone()
-        if not row or row[1] != 'pending': 
+        deposit = get_manual_deposit(dep_id)
+        if not deposit or deposit.get("status") != "pending":
             return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
-        deposit_uid = int(row[0]) if row[0] is not None else 0
-        logger.info("Manual deposit approval: deposit_id=%s user_id=%s amount=%s", dep_id, deposit_uid, row[2])
+        deposit_uid = int(deposit["user_id"])
+        logger.info("Manual deposit approval: deposit_id=%s user_id=%s amount=%s", dep_id, deposit_uid, deposit["amount"])
         
         if a_type == "exact":
             amt = int(p[5]) 
@@ -434,21 +437,26 @@ def register_deposit(bot):
         p = e.data.decode().split("|")
         dep_id, t_uid = p[1], int(p[2])
         
-        row = cur.execute("SELECT status, amount, method_name FROM deposits WHERE id=?", (dep_id,)).fetchone()
-        if not row or row[0] != 'pending': 
+        deposit = get_manual_deposit(dep_id)
+        if not deposit or deposit.get("status") != "pending":
             return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
-        
-        cur.execute("UPDATE deposits SET status='rejected' WHERE id=?", (dep_id,))
-        db.commit()
+
+        try:
+            rejection = repository.reject_deposit(dep_id)
+        except Exception:
+            return await e.answer("❌ Deposit rejection failed. Please try again.", alert=True)
+        if rejection.get("already_processed"):
+            return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
+        deposit = get_manual_deposit(dep_id)
         
         try:
-            await bot.send_message(int(t_uid), f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴅᴇᴘᴏsɪᴛ ʀᴇǫᴜᴇsᴛ ᴏғ <b>{P_INR}{row[1]}</b> ᴡᴀs ʀᴇᴊᴇᴄᴛᴇᴅ ʙʏ ᴀᴅᴍɪɴ.\n𝐈ғ ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ <b>𝐒ᴜᴘᴘᴏʀᴛ</b> ᴡɪᴛʜ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ ᴘʀᴏᴏғ.</blockquote>")
+            await bot.send_message(int(deposit["user_id"]), f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n𝐘ᴏᴜʀ ᴅᴇᴘᴏsɪᴛ ʀᴇǫᴜᴇsᴛ ᴏғ <b>{P_INR}{deposit['amount']}</b> ᴡᴀs ʀᴇᴊᴇᴄᴛᴇᴅ ʙʏ ᴀᴅᴍɪɴ.\n𝐈ғ ʏᴏᴜ ᴀʟʀᴇᴀᴅʏ ᴘᴀɪᴅ, ᴘʟᴇᴀsᴇ ᴄᴏɴᴛᴀᴄᴛ <b>𝐒ᴜᴘᴘᴏʀᴛ</b> ᴡɪᴛʜ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ ᴘʀᴏᴏғ.</blockquote>")
         except Exception as exc:
             logger.warning("Deposit rejection user notification failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
         
         rej_text = (f"<blockquote>{P_NO} <b>❌ 𝐃ᴇᴘᴏsɪᴛ 𝐑ᴇᴊᴇᴄᴛᴇᴅ!</b>\n\n"
-                    f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{t_uid}</code>\n"
-                    f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ:</b> {P_INR}{row[1]}\n"
+                    f"{P_ACC} <b>𝐔sᴇʀ:</b> <code>{deposit['user_id']}</code>\n"
+                    f"{P_MONEY} <b>𝐀ᴍᴏᴜɴᴛ:</b> {P_INR}{deposit['amount']}\n"
                     f"👨‍💻 <b>𝐑ᴇᴊᴇᴄᴛᴇᴅ 𝐁ʏ:</b> <code>{admin_uid}</code></blockquote>")
         try: await e.edit(rej_text)
         except MessageNotModifiedError: pass
@@ -462,10 +470,12 @@ def register_deposit(bot):
             
         _, dep_id, action = e.data.decode().split("|")
         dep_id = int(dep_id)
-        row = cur.execute("SELECT user_id, method_name, status, amount FROM deposits WHERE id=?", (dep_id,)).fetchone()
-        if not row or row[2] != 'pending': 
+        deposit = get_manual_deposit(dep_id)
+        if not deposit or deposit.get("status") != "pending":
             return await e.answer("⚠️ Already processed.", alert=True)
-        t_uid, method, orig_amt = row[0], row[1], row[3]
+        t_uid = deposit["user_id"]
+        method = deposit.get("method_name") or deposit.get("payment_method")
+        orig_amt = deposit["amount"]
         
         curr = custom_dep_amt.get(dep_id, "0")
         
@@ -486,7 +496,7 @@ def register_deposit(bot):
             amt = int(curr)
             if amt <= 0: return await e.answer("Amount must be > 0", alert=True)
             
-            async with get_user_lock(deposit_uid):
+            async with get_user_lock(t_uid):
                 try:
                     approval = approve_deposit(dep_id, amt)
                 except Exception:
