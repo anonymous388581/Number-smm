@@ -389,11 +389,12 @@ def register_deposit(bot):
         logger.info("Manual deposit approval: deposit_id=%s user_id=%s amount=%s", dep_id, deposit_uid, deposit["amount"])
         
         if a_type == "exact":
-            amt = int(p[5]) 
+            amt = int(deposit["amount"])
             async with get_user_lock(deposit_uid):
                 try:
                     approval = approve_deposit(dep_id, amt)
-                except Exception:
+                except Exception as exc:
+                    logger.exception("Manual deposit approval failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
                     return await e.answer("❌ Deposit approval failed. No balance was credited.", alert=True)
             if approval.get("already_processed"):
                 return await e.answer("⚠️ This deposit request has already been processed!", alert=True)
@@ -499,7 +500,8 @@ def register_deposit(bot):
             async with get_user_lock(t_uid):
                 try:
                     approval = approve_deposit(dep_id, amt)
-                except Exception:
+                except Exception as exc:
+                    logger.exception("Custom deposit approval failed: deposit_id=%s error_type=%s", dep_id, type(exc).__name__)
                     return await e.answer("❌ Deposit approval failed. No balance was credited.", alert=True)
             if approval.get("already_processed"):
                 return await e.answer("⚠️ This deposit request has already been processed!", alert=True)

@@ -132,30 +132,87 @@ class MongoRepository:
                 yield session
 
     def approve_deposit(self, deposit_id, amount):
-        with self.transaction() as session:
-            deposit = self.db.deposits.find_one_and_update(
-                {"_id": int(deposit_id), "status": "pending"},
-                {"$set": {"status": "approved", "amount": amount}},
-                session=session, return_document=ReturnDocument.BEFORE,
-            )
-            if deposit is None:
-                existing = self.db.deposits.find_one({"_id": int(deposit_id)}, session=session)
-                if existing:
-                    return {"approved": False, "already_processed": True,
-                            "user_id": existing.get("user_id"), "amount": existing.get("amount")}
-                raise ValueError(f"deposit {deposit_id} does not exist")
-            user_id = deposit.get("user_id")
+        try:
+            with self.transaction() as session:
+                return self._approve_deposit(deposit_id, amount, session=session)
+        except NotImplementedError as exc:
+            if "sessions" not in str(exc).lower():
+                raise
+            return self._approve_deposit_without_session(deposit_id, amount)
+
+    def _approve_deposit(self, deposit_id, amount, session=None):
+        find_kwargs = {"session": session} if session is not None else {}
+        deposit_query = {"_id": int(deposit_id), "status": "pending"}
+        deposit = self.db.deposits.find_one(deposit_query, **find_kwargs)
+        if deposit is None:
+            existing = self.db.deposits.find_one({"_id": int(deposit_id)}, **find_kwargs)
+            if existing:
+                return {"approved": False, "already_processed": True,
+                        "user_id": existing.get("user_id"), "amount": existing.get("amount")}
+            raise ValueError(f"deposit {deposit_id} does not exist")
+
+        user_id = deposit.get("user_id")
+        if not isinstance(user_id, int) or user_id <= 0:
+            raise ValueError(f"invalid user ID {user_id!r}")
+        amount = int(amount)
+        if amount <= 0:
+            raise ValueError(f"invalid deposit amount {amount!r}")
+        user = self.db.users.find_one_and_update(
+            {"_id": user_id}, {"$inc": {"balance": amount, "total_deposited": amount}},
+            session=session, return_document=ReturnDocument.AFTER,
+        )
+        if user is None:
+            raise ValueError(f"user {user_id} does not exist")
+        status_result = self.db.deposits.update_one(
+            deposit_query, {"$set": {"status": "approved", "amount": amount}}, **find_kwargs,
+        )
+        if status_result.matched_count != 1:
+            raise RuntimeError(f"deposit {deposit_id} status update was not applied")
+        return {"approved": True, "already_processed": False, "user_id": user_id,
+                "previous_balance": user["balance"] - amount,
+                "balance": user["balance"], "amount": amount, "status": "approved"}
+
+    def _approve_deposit_without_session(self, deposit_id, amount):
+        """Support clients without sessions while keeping the production path transactional."""
+        deposit = self.db.deposits.find_one_and_update(
+            {"_id": int(deposit_id), "status": "pending"},
+            {"$set": {"status": "processing"}},
+            return_document=ReturnDocument.BEFORE,
+        )
+        if deposit is None:
+            existing = self.db.deposits.find_one({"_id": int(deposit_id)})
+            if existing:
+                return {"approved": False, "already_processed": True,
+                        "user_id": existing.get("user_id"), "amount": existing.get("amount")}
+            raise ValueError(f"deposit {deposit_id} does not exist")
+        user_id = deposit.get("user_id")
+        amount = int(amount)
+        try:
             if not isinstance(user_id, int) or user_id <= 0:
                 raise ValueError(f"invalid user ID {user_id!r}")
+            if amount <= 0:
+                raise ValueError(f"invalid deposit amount {amount!r}")
             user = self.db.users.find_one_and_update(
                 {"_id": user_id}, {"$inc": {"balance": amount, "total_deposited": amount}},
-                session=session, return_document=ReturnDocument.AFTER,
+                return_document=ReturnDocument.AFTER,
             )
             if user is None:
                 raise ValueError(f"user {user_id} does not exist")
+            status_result = self.db.deposits.update_one(
+                {"_id": int(deposit_id), "status": "processing"},
+                {"$set": {"status": "approved", "amount": amount}},
+            )
+            if status_result.matched_count != 1:
+                raise RuntimeError(f"deposit {deposit_id} status update was not applied")
             return {"approved": True, "already_processed": False, "user_id": user_id,
                     "previous_balance": user["balance"] - amount,
                     "balance": user["balance"], "amount": amount, "status": "approved"}
+        except Exception:
+            self.db.deposits.update_one(
+                {"_id": int(deposit_id), "status": "processing"},
+                {"$set": {"status": "pending"}},
+            )
+            raise
 
     def get_deposit(self, deposit_id):
         """Find a deposit by its integer callback ID."""

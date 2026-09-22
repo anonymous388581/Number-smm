@@ -132,6 +132,32 @@ class MongoRuntimeTests(unittest.TestCase):
         self.assertEqual(self.repository.db.deposits.find_one({"_id": custom["id"]})["amount"], 275)
         self.assertEqual(self.repository.get_user(101)["balance"], 525)
 
+    def test_pending_deposit_accept_credits_balance_and_approves(self):
+        self.repository.ensure_user(303)
+        self.repository.update_balance(303, 100)
+        deposit, _ = self.repository.create_manual_deposit(
+            303, 50, "ManualUPI", "file-3", 303, 9003,
+        )
+
+        accepted = self.repository.approve_deposit(deposit["id"], deposit["amount"])
+        duplicate = self.repository.approve_deposit(deposit["id"], deposit["amount"])
+
+        self.assertTrue(accepted["approved"])
+        self.assertEqual(self.repository.get_user(303)["balance"], 150)
+        self.assertEqual(self.repository.get_deposit(deposit["id"])["status"], "approved")
+        self.assertTrue(duplicate["already_processed"])
+        self.assertEqual(self.repository.get_user(303)["balance"], 150)
+
+    def test_failed_deposit_credit_stays_pending(self):
+        deposit, _ = self.repository.create_manual_deposit(
+            404, 50, "ManualUPI", "file-4", 404, 9004,
+        )
+
+        with self.assertRaisesRegex(ValueError, "does not exist"):
+            self.repository.approve_deposit(deposit["id"], deposit["amount"])
+
+        self.assertEqual(self.repository.get_deposit(deposit["id"])["status"], "pending")
+
     def test_manual_deposit_reject_is_one_time_and_isolated(self):
         self.repository.ensure_user(101)
         self.repository.ensure_user(202)
