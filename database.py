@@ -5,6 +5,7 @@ import os
 from config import ADMIN_ID, SUPER_ADMINS, is_super_admin
 from mongo_cursor import MongoCursor
 from mongo_repository import MongoRepository
+from utils.telegram_sessions import restore_all_sessions
 
 repository = MongoRepository()
 cur = MongoCursor(repository)
@@ -32,6 +33,7 @@ db = MongoRuntime()
 def initialize_runtime():
     repository.ping()
     repository.ensure_indexes()
+    restore_all_sessions(repository)
     for user_id in SUPER_ADMINS:
         if user_id:
             repository.db.admins.update_one(

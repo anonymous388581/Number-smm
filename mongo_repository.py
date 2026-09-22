@@ -2,6 +2,9 @@
 
 import os
 import re
+import hashlib
+import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -12,7 +15,7 @@ from pymongo.errors import DuplicateKeyError
 COLLECTIONS = (
     "users", "settings", "stock", "auto_prices", "spamfree_prices", "deposits",
     "upi_orders", "orders", "custom_payments", "admins", "custom_countries",
-    "smm_orders", "source_codes", "panels", "redeemed_transactions",
+    "smm_orders", "source_codes", "panels", "redeemed_transactions", "telegram_sessions",
 )
 
 
@@ -59,6 +62,7 @@ class MongoRepository:
             for field, direction in fields:
                 self.db[collection].create_index([(field, direction)])
         self.db.deposits.create_index([("source_key", ASCENDING)], unique=True, sparse=True)
+        self.db.telegram_sessions.create_index([("account_key", ASCENDING)], unique=True, sparse=True)
 
     @staticmethod
     def _now():
@@ -96,9 +100,78 @@ class MongoRepository:
         """Persist one manual account directly in the Mongo stock collection."""
         document = dict(account)
         document["_id"] = document["phone"]
+        existing = self.db.stock.find_one({"_id": document["_id"]}, {"session_id": 1})
+        document.setdefault("session_id", (existing or {}).get("session_id") or self.session_id_for_account(document["phone"]))
         document.setdefault("added_date", self._now())
         self.db.stock.replace_one({"_id": document["_id"]}, document, upsert=True)
         return document
+
+    @staticmethod
+    def session_id_for_account(account_key):
+        """Return a stable, non-sensitive identifier for one Telegram account."""
+        normalized = str(account_key).strip().lstrip("+")
+        return "tg-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def get_telegram_session(self, session_id):
+        return self.db.telegram_sessions.find_one({"_id": str(session_id)})
+
+    @contextmanager
+    def _telegram_session_lock(self, session_id, timeout=30):
+        """Serialize writes across processes using a Mongo lease document."""
+        session_id = str(session_id)
+        owner = uuid.uuid4().hex
+        deadline = time.monotonic() + timeout
+        while True:
+            now = self._now()
+            try:
+                lock = self.db.telegram_session_locks.find_one_and_update(
+                    {"_id": session_id, "$or": [
+                        {"lock_until": {"$lte": now}}, {"lock_until": {"$exists": False}},
+                        {"lock_owner": owner},
+                    ]},
+                    {"$set": {"lock_owner": owner, "lock_until": datetime.fromtimestamp(now.timestamp() + 60, timezone.utc)}},
+                    upsert=True,
+                    return_document=ReturnDocument.AFTER,
+                )
+            except DuplicateKeyError:
+                lock = None
+            if lock and lock.get("lock_owner") == owner:
+                break
+            if time.monotonic() >= deadline:
+                raise TimeoutError("timed out acquiring Telegram session lock")
+            time.sleep(0.05)
+        try:
+            yield
+        finally:
+            self.db.telegram_session_locks.delete_one({"_id": session_id, "lock_owner": owner})
+
+    def persist_telegram_session(self, session_id, source_path, account_key=None):
+        """Atomically upsert a Telethon session and its runtime sidecar files."""
+        session_id = str(session_id)
+        source_path = os.path.abspath(source_path)
+        if not os.path.isfile(source_path):
+            raise FileNotFoundError(source_path)
+        with open(source_path, "rb") as source:
+            stored_files = {"session": source.read()}
+        for suffix in ("-wal", "-shm", "-journal"):
+            sidecar = source_path + suffix
+            if os.path.isfile(sidecar):
+                stored_files[suffix[1:]] = open(sidecar, "rb").read()
+        document = {
+            "_id": session_id,
+            "files": stored_files,
+            "updated_at": self._now(),
+            "format": "telethon-sqlite",
+        }
+        if account_key is not None:
+            document["account_key"] = str(account_key)
+        with self._telegram_session_lock(session_id):
+            self.db.telegram_sessions.replace_one({"_id": session_id}, document, upsert=True)
+        return document
+
+    def restore_telegram_sessions(self):
+        """Return persisted session records for startup materialization."""
+        return list(self.db.telegram_sessions.find({}, {"_id": 1, "files": 1, "account_key": 1}))
 
     def claim_stock_account(self, mode="bulk", country=None, year=None):
         query = {"available": 1}
@@ -118,11 +191,15 @@ class MongoRepository:
             query["twofa"] = {"$nin": [None, "", "None", "none"]}
         elif mode != "bulk":
             return None
-        return self.db.stock.find_one_and_update(
+        account = self.db.stock.find_one_and_update(
             query, {"$set": {"available": 0}},
             sort=[("added_date", ASCENDING), ("_id", ASCENDING)],
             return_document=ReturnDocument.BEFORE,
         )
+        if account and not account.get("session_id"):
+            account["session_id"] = self.session_id_for_account(account["phone"])
+            self.db.stock.update_one({"_id": account["_id"]}, {"$set": {"session_id": account["session_id"]}})
+        return account
 
     @contextmanager
     def transaction(self):

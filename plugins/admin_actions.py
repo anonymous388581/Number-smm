@@ -24,6 +24,7 @@ from config import *
 from utils.keyboards import style_btn
 from utils.states import admin_state
 from utils.lzt import lzt_client
+from utils.telegram_sessions import materialize_session, persist_session, session_id_for_account
 from plugins.admin import admin_panel_handler
 from utils.stock_categories import CATEGORY_LABELS, category_value
 
@@ -58,7 +59,7 @@ async def finalize_stock_category(event, token, selection):
     if draft["kind"] == "single":
         data = draft["account"]
         account = {
-            "phone": data[0], "session_file": data[1], "country_name": data[2],
+            "phone": data[0], "session_file": data[1], "session_id": session_id_for_account(data[0]), "country_name": data[2],
             "country_icon": data[3], "account_year": data[4], "category": category,
             "price": data[5], "available": data[6], "twofa": data[7],
         }
@@ -86,12 +87,20 @@ async def finalize_stock_category(event, token, selection):
     success = 0
     for c_name, year, accs, c_icon, price, twofa_pass in draft["groups"]:
         for acc in accs:
+            session_id = session_id_for_account(acc["phone"])
+            repository = getattr(db, "repository", None)
+            if repository is not None:
+                try:
+                    persist_session(repository, session_id, acc["path"] + ".session", account_key=acc["phone"])
+                except (OSError, ValueError, TimeoutError) as exc:
+                    logger.warning("Session import failed; account was not added: error_type=%s", type(exc).__name__)
+                    continue
             perm_base = f"sessions/{acc['phone']}"
             for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
                 if os.path.exists(acc['path'] + ext):
                     shutil.move(acc['path'] + ext, perm_base + ext)
             account = {
-                "phone": acc["phone"], "session_file": perm_base + ".session",
+                "phone": acc["phone"], "session_file": perm_base + ".session", "session_id": session_id,
                 "country_name": c_name, "country_icon": c_icon, "account_year": year,
                 "category": category, "price": price, "available": 1, "twofa": twofa_pass,
             }
@@ -163,16 +172,19 @@ async def channels_manager_menu(event):
 
 async def run_stock_check(event):
     msg = await event.respond("🔄 <b>Checking Stock...</b>\nPlease wait, this may take a while.", parse_mode="html")
-    stock_items = cur.execute("SELECT phone, session_file FROM stock WHERE available=1").fetchall()
+    stock_items = cur.execute("SELECT phone, session_file, session_id FROM stock WHERE available=1").fetchall()
     total = len(stock_items)
     if total == 0:
         return await msg.edit("⚠️ <b>No stock to check.</b>", parse_mode="html")
     
     dead = 0
     alive = 0
-    for idx, (phone, sess) in enumerate(stock_items):
+    for idx, (phone, sess, session_id) in enumerate(stock_items):
+        client = None
         try:
-            client = TelegramClient(sess, API_ID, API_HASH)
+            session_id = session_id or session_id_for_account(phone)
+            runtime_session = materialize_session(db.repository, session_id, sess, account_key=phone)
+            client = TelegramClient(runtime_session, API_ID, API_HASH)
             await client.connect()
             if not await client.is_user_authorized():
                 raise Exception("Dead")
@@ -824,6 +836,12 @@ async def admin_actions(event):
                 
                 auto_year = await detect_account_year(client)
                 await client.disconnect()
+                session_id = session_id_for_account(phone)
+                try:
+                    persist_session(db.repository, session_id, sp + ".session", account_key=phone)
+                except (OSError, ValueError, TimeoutError) as exc:
+                    logger.warning("Session import failed after manual login: error_type=%s", type(exc).__name__)
+                    return await conv.send_message(f"{P_NO} Could not persist this account session. The account was not added.")
                 
                 year = int((await get_reply(f"{P_CAL} Detected Year: <b>{auto_year}</b>\nReply with Year to confirm or change:")).text)
                 auto_row = cur.execute("SELECT price FROM auto_prices WHERE country=? AND year=?", (c_name, str(year))).fetchone()

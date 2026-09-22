@@ -22,7 +22,7 @@ TABLE_KEYS = {
 SCHEMA_COLUMNS = {
     "users": ["user_id", "balance", "referred_by", "total_deposited", "joined_date", "banned", "discount", "terms_accepted"],
     "settings": ["key", "value"],
-    "stock": ["phone", "session_file", "country_name", "country_icon", "account_year", "category", "price", "available", "twofa", "added_date"],
+    "stock": ["phone", "session_file", "session_id", "country_name", "country_icon", "account_year", "category", "price", "available", "twofa", "added_date"],
     "auto_prices": ["country", "year", "price"], "spamfree_prices": ["country", "price"],
     "deposits": ["id", "user_id", "amount", "method_name", "payment_method", "screenshot_file_id", "source_chat_id", "source_message_id", "status", "created_at", "date"],
     "upi_orders": ["order_id", "user_id", "amount", "status", "date"],

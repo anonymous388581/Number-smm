@@ -23,6 +23,7 @@ from utils.keyboards import style_btn
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT
 from utils.stock_filters import claim_stock_account, stock_filter_clause
+from utils.telegram_sessions import materialize_session, persist_session
 
 search_state = {}
 change_number_state = {}
@@ -469,6 +470,16 @@ async def process_purchase(event, mode, country, year, price_str):
         # Local session processing
         await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
         
+        session_id = local_row.get('session_id') or db.repository.session_id_for_account(phone)
+        try:
+            sess = materialize_session(db.repository, session_id, sess, account_key=phone)
+        except (OSError, ValueError, TimeoutError) as exc:
+            logger.warning("Session restore failed: error_type=%s", type(exc).__name__)
+            async with get_user_lock(uid):
+                cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
+                cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
+                db.commit()
+            return await event.edit(f"{P_NO} <b>Error initializing account. (Session unavailable)</b> Money refunded.")
         client = TelegramClient(sess, API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
         try:
             await client.connect()
@@ -491,6 +502,7 @@ async def process_purchase(event, mode, country, year, price_str):
         
         active_orders[phone] = {
             'uid': uid, 'client': client, 'sess': sess, 'start_time': time.time(), 
+            'session_id': session_id,
             'paid': False, 'price': final_price, 'country': country, 'year': actual_year, 
             'c_icon': c_icon, 'twofa': twofa_pass, 'msg_id': sent_msg.id, 'is_lzt': False
         }
@@ -708,6 +720,9 @@ async def auto_otp_task(phone):
         order = active_orders.pop(phone)
         try: await order['client'].disconnect()
         except Exception as exc: logger.warning("Order client disconnect failed after timeout: error_type=%s", type(exc).__name__)
+        if not order.get('is_lzt'):
+            try: persist_session(db.repository, order['session_id'], order['sess'], account_key=phone)
+            except (OSError, ValueError, TimeoutError) as exc: logger.warning("Session save failed after timeout: error_type=%s", type(exc).__name__)
         
         # Local manual stock -> refund & restore stock
         if not order.get('is_lzt'):
@@ -799,6 +814,9 @@ def register_buy(bot):
             if 'client' in order and order['client']:
                 await order['client'].disconnect()
         except: pass
+        if not order.get('is_lzt'):
+            try: persist_session(db.repository, order['session_id'], order['sess'], account_key=phone)
+            except (OSError, ValueError, TimeoutError) as exc: logger.warning("Session save failed after cancel: error_type=%s", type(exc).__name__)
             
         async with get_user_lock(order['uid']):
             cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (refund_amt, order['uid']))
@@ -860,6 +878,8 @@ def register_buy(bot):
                 try: await order['client'].disconnect()
                 except: pass
             if not order.get('is_lzt') and 'sess' in order:
+                try: persist_session(db.repository, order['session_id'], order['sess'], account_key=phone)
+                except (OSError, ValueError, TimeoutError) as exc: logger.warning("Session save failed after order: error_type=%s", type(exc).__name__)
                 for ext in ['.session', '.session-wal', '.session-shm', '.session-journal']:
                     if os.path.exists(order['sess'] + ext): os.remove(order['sess'] + ext)
             msg = f"<blockquote>{PE_CHECK} <b>🎉 𝐎ʀᴅᴇʀ 𝐂ᴏᴍᴘʟᴇᴛᴇᴅ!</b>\n\n𝐓ʜᴀɴᴋ ʏᴏᴜ ғᴏʀ ʏᴏᴜʀ ᴘᴜʀᴄʜᴀsᴇ. 𝐘ᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ɪs ʀᴇᴀᴅʏ ᴛᴏ ᴜsᴇ!</blockquote>"
@@ -1051,6 +1071,9 @@ def register_buy(bot):
                 
                 try: await client.disconnect()
                 except: pass
+                if not order.get('is_lzt'):
+                    try: persist_session(db.repository, order['session_id'], order['sess'], account_key=orig_phone)
+                    except (OSError, ValueError, TimeoutError) as exc: logger.warning("Session save failed after number change: error_type=%s", type(exc).__name__)
                 active_orders.pop(orig_phone, None)
                 
                 fee_note = f"\n💰 <b>𝐒ᴇʀᴠɪᴄᴇ 𝐅ᴇᴇ 𝐂ʜᴀʀɢᴇᴅ:</b> <code>{P_INR}{fee}</code>" if fee > 0 else ""
