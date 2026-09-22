@@ -30,15 +30,8 @@ venv/
 ENV/
 env/
 
-# Environment variables & database files
+# Environment variables
 .env
-*.db
-*.sqlite
-*.sqlite3
-*.db-wal
-*.db-shm
-*.sqlite-wal
-*.sqlite-shm
 
 # Telegram sessions & transient logs
 *.session

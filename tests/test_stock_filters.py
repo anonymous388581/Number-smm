@@ -1,50 +1,37 @@
-import sqlite3
 import unittest
 
+import mongomock
+
+from mongo_cursor import MongoCursor
+from mongo_repository import MongoRepository
 from utils.stock_filters import stock_filter_clause
 
 
 class StockFilterTests(unittest.TestCase):
     def setUp(self):
-        self.connection = sqlite3.connect(":memory:")
-        self.connection.execute(
-            """
-            CREATE TABLE stock (
-                phone TEXT PRIMARY KEY,
-                country_name TEXT,
-                account_year INTEGER,
-                category TEXT,
-                available INTEGER,
-                twofa TEXT,
-                price INTEGER
-            )
-            """
-        )
-        self.connection.executemany(
-            "INSERT INTO stock VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                ("a", "India", 2026, "Good", 1, "None", 100),
-                ("b", "India", 2025, "spam", 1, "None", 80),
-                ("c", "India", 2026, "Good", 1, "real-password", 100),
-                ("d", "India", 2024, "Good", 0, "None", 100),
-            ],
-        )
-
-    def tearDown(self):
-        self.connection.close()
+        self.repository = MongoRepository(client=mongomock.MongoClient(), database_name="filters_test")
+        self.repository.db.stock.insert_many([
+            {"_id": "a", "phone": "a", "country_name": "India", "account_year": 2026,
+             "category": "Good", "available": 1, "twofa": "None", "price": 100},
+            {"_id": "b", "phone": "b", "country_name": "India", "account_year": 2025,
+             "category": "spam", "available": 1, "twofa": "None", "price": 80},
+            {"_id": "c", "phone": "c", "country_name": "India", "account_year": 2026,
+             "category": "Good", "available": 1, "twofa": "real-password", "price": 100},
+            {"_id": "d", "phone": "d", "country_name": "India", "account_year": 2024,
+             "category": "Good", "available": 0, "twofa": "None", "price": 100},
+        ])
+        self.cursor = MongoCursor(self.repository)
 
     def phones(self, mode, year=None):
         where, params = stock_filter_clause(mode, year=year, country="India")
         return {
             row[0]
-            for row in self.connection.execute(
-                f"SELECT phone FROM stock WHERE {where}", params
-            )
+            for row in self.cursor.execute(f"SELECT phone FROM stock WHERE {where}", params).fetchall()
         }
 
     def countries(self, mode, year=None):
         where, params = stock_filter_clause(mode, year=year)
-        return self.connection.execute(
+        return self.cursor.execute(
             f"SELECT country_name, COUNT(*) FROM stock WHERE {where} GROUP BY country_name",
             params,
         ).fetchall()

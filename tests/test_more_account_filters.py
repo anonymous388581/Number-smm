@@ -1,14 +1,17 @@
 import asyncio
 import os
-import sqlite3
 import unittest
 from unittest.mock import patch
+
+import mongomock
 
 os.environ.setdefault("API_ID", "1")
 os.environ.setdefault("API_HASH", "test-api-hash")
 os.environ.setdefault("MONGODB_URI", "mongomock://localhost")
 
 from database import get_more_account_filters_enabled, set_more_account_filters_enabled
+from mongo_cursor import MongoCursor
+from mongo_repository import MongoRepository
 from plugins import buy
 
 
@@ -28,24 +31,19 @@ class FakeEvent:
 
 class MoreAccountFiltersTests(unittest.TestCase):
     def test_setting_defaults_on_and_persists_off_then_on(self):
-        connection = sqlite3.connect(":memory:")
-        connection.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
-
-        class Cursor:
-            def execute(self, query, params=()):
-                return connection.execute(query, params)
+        repository = MongoRepository(client=mongomock.MongoClient(), database_name="settings_test")
+        cursor = MongoCursor(repository)
 
         class Database:
             def commit(self):
-                connection.commit()
+                return None
 
-        with patch("database.cur", Cursor()), patch("database.db", Database()):
+        with patch("database.cur", cursor), patch("database.db", Database()):
             self.assertTrue(get_more_account_filters_enabled())
             set_more_account_filters_enabled(False)
             self.assertFalse(get_more_account_filters_enabled())
             set_more_account_filters_enabled(True)
             self.assertTrue(get_more_account_filters_enabled())
-        connection.close()
 
     def menu(self, bot_mode, enabled):
         event = FakeEvent()

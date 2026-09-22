@@ -1,12 +1,16 @@
 import asyncio
 import os
-import sqlite3
 import unittest
 from unittest.mock import patch
 
+import mongomock
+
 os.environ.setdefault("API_ID", "1")
 os.environ.setdefault("API_HASH", "test-api-hash")
+os.environ.setdefault("MONGODB_URI", "mongomock://localhost")
 
+from mongo_cursor import MongoCursor
+from mongo_repository import MongoRepository
 from plugins import admin_actions
 from utils.stock_categories import category_value
 from utils.stock_filters import stock_filter_clause
@@ -14,61 +18,36 @@ from utils.stock_filters import stock_filter_clause
 
 class StockCategoryTests(unittest.TestCase):
     def setUp(self):
-        self.connection = sqlite3.connect(":memory:")
-        self.connection.execute(
-            """
-            CREATE TABLE stock (
-                phone TEXT PRIMARY KEY,
-                session_file TEXT,
-                country_name TEXT,
-                country_icon TEXT,
-                account_year INTEGER,
-                category TEXT,
-                price INTEGER,
-                available INTEGER,
-                twofa TEXT
-            )
-            """
-        )
-
-    def tearDown(self):
-        self.connection.close()
+        self.repository = MongoRepository(client=mongomock.MongoClient(), database_name="categories_test")
+        self.cursor = MongoCursor(self.repository)
 
     def add_account(self, phone, selection):
         category = category_value(selection)
-        self.connection.execute(
-            "INSERT INTO stock VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (phone, "session", "India", "", 2026, category, 100, 1, "None"),
-        )
-        self.connection.commit()
+        self.repository.db.stock.insert_one({
+            "_id": phone, "phone": phone, "session_file": "session", "country_name": "India",
+            "country_icon": "", "account_year": 2026, "category": category, "price": 100,
+            "available": 1, "twofa": "None",
+        })
 
     def matching_phones(self, mode):
         where, params = stock_filter_clause(mode)
         return {
             row[0]
-            for row in self.connection.execute(
-                f"SELECT phone FROM stock WHERE {where}", params
-            )
+            for row in self.cursor.execute(f"SELECT phone FROM stock WHERE {where}", params).fetchall()
         }
 
     def test_explicit_nonspam_selection_stores_good(self):
         self.add_account("nonspam", "nonspam")
-        self.assertEqual(
-            self.connection.execute("SELECT category FROM stock WHERE phone='nonspam'").fetchone()[0],
-            "Good",
-        )
+        self.assertEqual(self.repository.db.stock.find_one({"phone": "nonspam"})["category"], "Good")
 
     def test_explicit_spam_selection_stores_spam(self):
         self.add_account("spam", "spam")
-        self.assertEqual(
-            self.connection.execute("SELECT category FROM stock WHERE phone='spam'").fetchone()[0],
-            "spam",
-        )
+        self.assertEqual(self.repository.db.stock.find_one({"phone": "spam"})["category"], "spam")
 
     def test_missing_selection_cannot_insert(self):
         with self.assertRaises(ValueError):
             category_value(None)
-        self.assertEqual(self.connection.execute("SELECT COUNT(*) FROM stock").fetchone()[0], 0)
+        self.assertEqual(self.repository.db.stock.count_documents({}), 0)
 
     def test_buy_filters_separate_selected_categories(self):
         self.add_account("nonspam", "nonspam")
@@ -77,24 +56,6 @@ class StockCategoryTests(unittest.TestCase):
         self.assertEqual(self.matching_phones("spam"), {"spam"})
 
     def test_bulk_finalization_uses_one_category_for_every_account(self):
-        connection = sqlite3.connect(":memory:")
-        connection.execute(
-            """
-            CREATE TABLE stock (
-                phone TEXT PRIMARY KEY,
-                session_file TEXT,
-                country_name TEXT,
-                country_icon TEXT,
-                account_year INTEGER,
-                category TEXT,
-                price INTEGER,
-                available INTEGER,
-                twofa TEXT
-            )
-            """
-        )
-        connection.commit()
-
         class FakeEvent:
             def __init__(self):
                 self.chat_id = 1
@@ -115,11 +76,14 @@ class StockCategoryTests(unittest.TestCase):
             "extracted_dir": "/tmp/stock-batch",
         }
 
-        with patch.object(admin_actions, "cur", connection.cursor()), patch.object(admin_actions, "db", type("DB", (), {"commit": connection.commit})()):
+        database = type("DB", (), {"commit": lambda self: None})()
+        with patch.object(admin_actions, "cur", self.cursor), patch.object(admin_actions, "db", database):
             asyncio.run(admin_actions.finalize_stock_category(fake_event, token, "nonspam"))
 
-        rows = connection.execute("SELECT phone, category FROM stock ORDER BY phone").fetchall()
-        self.assertEqual(rows, [("998", "Good"), ("999", "Good")])
+        rows = list(self.repository.db.stock.find(
+            {"phone": {"$in": ["998", "999"]}}, {"_id": 0, "phone": 1, "category": 1}
+        ).sort("phone", 1))
+        self.assertEqual([(row["phone"], row["category"]) for row in rows], [("998", "Good"), ("999", "Good")])
 
         admin_actions.pending_stock_categories[(fake_event.chat_id, fake_event.sender_id, "bulk-token-2")] = {
             "kind": "batch",
@@ -130,12 +94,13 @@ class StockCategoryTests(unittest.TestCase):
             "extracted_dir": "/tmp/stock-batch-2",
         }
 
-        with patch.object(admin_actions, "cur", connection.cursor()), patch.object(admin_actions, "db", type("DB", (), {"commit": connection.commit})()):
+        with patch.object(admin_actions, "cur", self.cursor), patch.object(admin_actions, "db", database):
             asyncio.run(admin_actions.finalize_stock_category(fake_event, "bulk-token-2", "spam"))
 
-        rows = connection.execute("SELECT phone, category FROM stock WHERE phone IN ('997', '996') ORDER BY phone").fetchall()
-        self.assertEqual(rows, [("996", "spam"), ("997", "spam")])
-        connection.close()
+        rows = list(self.repository.db.stock.find(
+            {"phone": {"$in": ["996", "997"]}}, {"_id": 0, "phone": 1, "category": 1}
+        ).sort("phone", 1))
+        self.assertEqual([(row["phone"], row["category"]) for row in rows], [("996", "spam"), ("997", "spam")])
 
 
 if __name__ == "__main__":

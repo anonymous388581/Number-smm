@@ -2,8 +2,7 @@
 
 Handlers historically consume tuple-shaped rows from ``database.cur``. This
 adapter preserves those return shapes while translating the supported query
-surface into Mongo operations. It never opens SQLite or evaluates SQL through
-a local database engine.
+surface into Mongo operations.
 """
 
 import re
@@ -85,14 +84,27 @@ def _matches(document, expression, params):
             pos += len(re.findall(r"\?", part))
         return False
 
-    match = re.match(r"LOWER\(\s*(\w+)\s*\)\s*(=|!=)\s*'([^']*)'", expression, re.I)
+    match = re.match(
+        r"(?P<functions>(?:(?:LOWER|TRIM)\s*\(\s*)*)(?P<field>\w+)"
+        r"\s*(?:\)\s*)+(?P<operator>=|!=)\s*'(?P<expected>[^']*)'",
+        expression,
+        re.I,
+    )
     if match:
-        value = str(_field_value(document, match.group(1)) or "").lower()
-        return (value == match.group(3).lower()) if match.group(2) == "=" else value != match.group(3).lower()
+        value = str(_field_value(document, match.group("field")) or "")
+        functions = match.group("functions").upper()
+        if "TRIM" in functions:
+            value = value.strip()
+        if "LOWER" in functions:
+            value = value.lower()
+        expected = match.group("expected")
+        if "LOWER" in functions:
+            expected = expected.lower()
+        return (value == expected) if match.group("operator") == "=" else value != expected
     match = re.match(r"(?:TRIM\()?\s*(\w+)\s*\)?\s+IS\s+(NOT\s+)?NULL", expression, re.I)
     if match:
         present = _field_value(document, match.group(1)) is not None
-        return not present if match.group(2) else present
+        return present if match.group(2) else not present
     match = re.match(r"(\w+)\s+IN\s*\((.+)\)", expression, re.I)
     if match:
         values = [_clean(item) for item in match.group(2).split(",")]

@@ -2,6 +2,7 @@ import unittest
 
 import mongomock
 
+from mongo_cursor import MongoCursor
 from mongo_repository import MongoRepository
 
 
@@ -30,6 +31,40 @@ class MongoRuntimeTests(unittest.TestCase):
         self.assertEqual(claimed["phone"], "good")
         self.assertIsNone(self.repository.claim_stock_account("nonspam", country="India"))
         self.assertEqual(self.repository.claim_stock_account("spam", country="India")["phone"], "spam")
+
+    def test_stock_category_filters_preserve_country_year_and_availability(self):
+        self.repository.db.stock.insert_many([
+            {"_id": "clean-india", "phone": "clean-india", "country_name": "India", "account_year": 2026,
+             "category": "Good", "available": 1, "twofa": "None"},
+            {"_id": "clean-brazil", "phone": "clean-brazil", "country_name": "Brazil", "account_year": 2025,
+             "category": "Good", "available": 1, "twofa": "None"},
+            {"_id": "spam-india", "phone": "spam-india", "country_name": "India", "account_year": 2026,
+             "category": "spam", "available": 1, "twofa": "None"},
+            {"_id": "spam-brazil", "phone": "spam-brazil", "country_name": "Brazil", "account_year": 2025,
+             "category": "spam", "available": 1, "twofa": "None"},
+            {"_id": "unavailable-clean", "phone": "unavailable-clean", "country_name": "India", "account_year": 2026,
+             "category": "Good", "available": 0, "twofa": "None"},
+        ])
+
+        cursor = MongoCursor(self.repository)
+        nonspam_where = "available=1 AND category IS NOT NULL AND LOWER(category) != 'spam'"
+        spam_where = "available=1 AND LOWER(category) = 'spam'"
+        self.assertEqual(
+            {row[0] for row in cursor.execute(f"SELECT phone FROM stock WHERE {nonspam_where}").fetchall()},
+            {"clean-india", "clean-brazil"},
+        )
+        self.assertEqual(
+            {row[0] for row in cursor.execute(f"SELECT phone FROM stock WHERE {spam_where}").fetchall()},
+            {"spam-india", "spam-brazil"},
+        )
+        self.assertEqual(
+            {row[0] for row in cursor.execute(f"SELECT phone FROM stock WHERE {nonspam_where} AND country_name=? AND account_year=?", ("India", 2026)).fetchall()},
+            {"clean-india"},
+        )
+        self.assertEqual(
+            {row[0] for row in cursor.execute(f"SELECT phone FROM stock WHERE {spam_where} AND country_name=? AND account_year=?", ("Brazil", 2025)).fetchall()},
+            {"spam-brazil"},
+        )
 
     def test_settings_and_lzt_settings_persist(self):
         self.repository.set_setting("bot_mode", "hybrid")

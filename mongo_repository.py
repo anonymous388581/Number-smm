@@ -16,7 +16,7 @@ COLLECTIONS = (
 
 
 class MongoRepository:
-    """Small repository for Mongo-native operations used by migration and cutover."""
+    """Small repository for Mongo-native operations used by the bot runtime."""
 
     def __init__(self, uri=None, database_name=None, client=None):
         self.uri = uri or os.getenv("MONGODB_URI") or os.getenv("MONGO_URI")
