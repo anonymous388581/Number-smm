@@ -80,6 +80,14 @@ class MongoRepository:
     def get_user(self, user_id):
         return self.db.users.find_one({"_id": int(user_id)})
 
+    def get_orders_for_user(self, user_id, limit=10):
+        normalized_user_id = int(user_id)
+        return list(
+            self.db.orders.find(
+                {"user_id": {"$in": [normalized_user_id, str(normalized_user_id)]}}
+            ).sort([("id", DESCENDING), ("date", DESCENDING)]).limit(limit)
+        )
+
     def update_balance(self, user_id, amount):
         result = self.db.users.find_one_and_update(
             {"_id": int(user_id)}, {"$inc": {"balance": amount}},
@@ -196,10 +204,17 @@ class MongoRepository:
             sort=[("added_date", ASCENDING), ("_id", ASCENDING)],
             return_document=ReturnDocument.BEFORE,
         )
-        if account and not account.get("session_id"):
-            account["session_id"] = self.session_id_for_account(account["phone"])
-            self.db.stock.update_one({"_id": account["_id"]}, {"$set": {"session_id": account["session_id"]}})
         return account
+
+    def release_stock_account(self, account):
+        """Return a claimed account to available stock without changing its mapping."""
+        if not account or "_id" not in account:
+            return False
+        result = self.db.stock.update_one(
+            {"_id": account["_id"], "available": 0},
+            {"$set": {"available": 1}},
+        )
+        return result.modified_count == 1
 
     @contextmanager
     def transaction(self):

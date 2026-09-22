@@ -1,13 +1,22 @@
 import os
+from datetime import date, datetime
 from telethon import events, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, get_support_url, to_usd, get_flag_by_country_name, is_admin, get_bot_mode
+from database import cur, db, repository, get_support_url, to_usd, get_flag_by_country_name, is_admin, get_bot_mode
 from config import P_NO, P_MONEY, P_INR, P_GIFT, P_USERS, PE_LOCATION, PE_GIFT, PE_CROWN
 from utils.states import session_buy_state, deposit_input, active_orders, waiting_proof
 from plugins.start import send_main_menu
 from utils.helpers import check_channel_joined
 from utils.keyboards import style_btn, style_url
 from utils.lzt import COUNTRY_TO_LZT
+
+
+def _format_order_date(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value or "")[:10]
 
 async def send_stock_page(event, page=1):
     bot_mode = get_bot_mode()
@@ -232,13 +241,14 @@ def register_callbacks(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^(📦 𝐌ʏ 𝐎ʀᴅᴇʀs|📦 My Orders)$"))
     async def msg_my_orders(e):
         uid = e.sender_id
-        rows = cur.execute("SELECT phone, country, price, date FROM orders WHERE user_id=? ORDER BY id DESC LIMIT 10", (uid,)).fetchall()
+        rows = repository.get_orders_for_user(uid)
         if not rows:
             return await e.respond(f"<blockquote>{PE_GIFT} <b>𝐌ʏ 𝐎ʀᴅᴇʀs</b></blockquote>\n\n<blockquote>𝐍ᴏ ᴏʀᴅᴇʀs ʏᴇᴛ. 𝐁ᴜʏ ʏᴏᴜʀ ғɪʀsᴛ ᴀᴄᴄᴏᴜɴᴛ!</blockquote>")
         msg = f"<blockquote>{PE_GIFT} <b>𝐌ʏ 𝐎ʀᴅᴇʀs</b> (𝐋ᴀsᴛ 10)</blockquote>\n\n"
-        for ph, cn, pr, dt in rows:
+        for row in rows:
+            ph, cn, pr, dt = row.get("phone"), row.get("country"), row.get("price"), row.get("date")
             flag = get_flag_by_country_name(cn)
-            msg += f"<blockquote>{flag} {cn} | <code>{ph}</code>\n{P_MONEY} {P_INR}{pr} | 📅 {dt[:10]}</blockquote>\n"
+            msg += f"<blockquote>{flag} {cn} | <code>{ph}</code>\n{P_MONEY} {P_INR}{pr} | 📅 {_format_order_date(dt)}</blockquote>\n"
         await e.respond(msg)
 
     @bot.on(events.NewMessage(pattern=r"(?i)^(💰 𝐁ᴀʟᴀɴᴄᴇ|💰 Balance)$"))

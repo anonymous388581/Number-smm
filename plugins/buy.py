@@ -451,7 +451,8 @@ async def process_purchase(event, mode, country, year, price_str):
             return await event.answer("❌ Out of stock!", alert=True)
 
         if is_local:
-            phone, sess, twofa_pass = local_row
+            phone = local_row.get('phone')
+            twofa_pass = local_row.get('twofa') or "None"
             cur.execute("UPDATE users SET balance = balance - ? WHERE user_id=? AND balance >= ?", (final_price, uid, final_price))
             if cur.rowcount == 0:
                 db.rollback()
@@ -470,18 +471,21 @@ async def process_purchase(event, mode, country, year, price_str):
         # Local session processing
         await event.edit(f"{PE_LIGHTNING} <b>𝐏ʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ᴏʀᴅᴇʀ...</b>\n𝐏ʟᴇᴀsᴇ ᴡᴀɪᴛ ᴡʜɪʟᴇ ᴡᴇ ɪɴɪᴛɪᴀʟɪᴢᴇ ᴛʜᴇ sᴇssɪᴏɴ.")
         
-        session_id = local_row.get('session_id') or db.repository.session_id_for_account(phone)
+        session_id = local_row.get('session_id')
         try:
-            sess = materialize_session(db.repository, session_id, sess, account_key=phone)
+            if not session_id:
+                raise ValueError("Stock account has no session_id")
+            sess = materialize_session(db.repository, session_id, account_key=phone)
         except (OSError, ValueError, TimeoutError) as exc:
             logger.warning("Session restore failed: error_type=%s", type(exc).__name__)
             async with get_user_lock(uid):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
-                cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
+                db.repository.release_stock_account(local_row)
                 db.commit()
             return await event.edit(f"{P_NO} <b>Error initializing account. (Session unavailable)</b> Money refunded.")
-        client = TelegramClient(sess, API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
+
         try:
+            client = TelegramClient(sess, API_ID, API_HASH, connection_retries=None, retry_delay=3, auto_reconnect=True)
             await client.connect()
             if not await client.is_user_authorized():
                 raise Exception("Session expired or not authorized")
@@ -491,7 +495,7 @@ async def process_purchase(event, mode, country, year, price_str):
             except: pass
             async with get_user_lock(uid):
                 cur.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (final_price, uid))
-                cur.execute("DELETE FROM stock WHERE phone=?", (phone,))
+                db.repository.release_stock_account(local_row)
                 db.commit()
             return await event.edit(f"{P_NO} <b>Error initializing account. (Session Dead)</b> Money refunded.")
 

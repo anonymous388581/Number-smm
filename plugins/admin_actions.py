@@ -183,7 +183,7 @@ async def run_stock_check(event):
         client = None
         try:
             session_id = session_id or session_id_for_account(phone)
-            runtime_session = materialize_session(db.repository, session_id, sess, account_key=phone)
+            runtime_session = materialize_session(db.repository, session_id, account_key=phone)
             client = TelegramClient(runtime_session, API_ID, API_HASH)
             await client.connect()
             if not await client.is_user_authorized():
