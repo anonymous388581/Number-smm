@@ -20,9 +20,20 @@ SMM_SERVERS = {
     2: _smm_server_config(2, '𝐁ᴜᴅɢᴇᴛ 𝐒ᴇʀᴠᴇʀ 2 (𝐂ʜᴇᴀᴘᴇsᴛ 𝐑ᴀᴛᴇ)', 'https://best-smm.com/api/v2', 'USD')
 }
 
+def _normalize_server(server):
+    try:
+        server = int(server)
+    except (TypeError, ValueError):
+        return None
+    return server if server in SMM_SERVERS else None
+
 
 def _get_smm_server(server):
-    srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
+    server = _normalize_server(server)
+    if server is None:
+        logger.error('SMM server selection is invalid')
+        return None
+    srv = SMM_SERVERS[server]
     missing = []
     if not srv['key']:
         missing.append(f'SMM_SERVER_{server}_KEY')
@@ -72,6 +83,9 @@ PLATFORM_PREMIUM_ICONS = {
 
 async def fetch_smm_services(server=1, force_refresh=False):
     global _services_cache, _cache_time
+    server = _normalize_server(server)
+    if server is None:
+        return []
     now = time.time()
     if not force_refresh and _services_cache.get(server) and (now - _cache_time.get(server, 0) < 600):
         return _services_cache[server]
@@ -93,10 +107,11 @@ async def fetch_smm_services(server=1, force_refresh=False):
                         _services_cache[server] = data
                         _cache_time[server] = now
                         return data
-                    else:
-                        logger.error(f"SMM services returned non-list: {data}")
+                    logger.error("SMM services returned a non-list response for server %s", server)
+                else:
+                    logger.error("SMM services request failed for server %s with HTTP status %s", server, resp.status)
     except Exception as ex:
-        logger.error(f"SMM fetch_services error (server {server}): {ex}")
+        logger.error("SMM fetch_services error for server %s: %s", server, type(ex).__name__)
         
     return _services_cache.get(server) or []
 
@@ -174,8 +189,8 @@ async def create_smm_order(service_id, link, quantity, server=1):
                 data = await resp.json(content_type=None)
                 return data
     except Exception as ex:
-        logger.error(f"SMM create_order error: {ex}")
-        return {'error': str(ex)}
+        logger.error("SMM create_order error for server %s: %s", server, type(ex).__name__)
+        return {'error': 'SMM provider request failed.'}
 
 async def get_smm_order_status(order_id, server=1):
     srv = _get_smm_server(server)
@@ -193,5 +208,5 @@ async def get_smm_order_status(order_id, server=1):
                 data = await resp.json(content_type=None)
                 return data
     except Exception as ex:
-        logger.error(f"SMM get_order_status error: {ex}")
-        return {'error': str(ex)}
+        logger.error("SMM get_order_status error for server %s: %s", server, type(ex).__name__)
+        return {'error': 'SMM provider request failed.'}

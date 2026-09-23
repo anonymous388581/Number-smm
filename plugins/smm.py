@@ -39,6 +39,9 @@ async def show_smm_servers(event):
 async def show_smm_platforms_menu(event, server=1):
     srv = SMM_SERVERS.get(server, SMM_SERVERS[1])
     platforms = await get_smm_platforms(server)
+
+    if not platforms:
+        return await event.answer("⚠️ No SMM services are available for this server right now.", alert=True)
     
     btns = []
     plat_row = []

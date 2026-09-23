@@ -27,3 +27,7 @@ services:
         sync: false
       - key: MONGODB_DB_NAME
         value: numbott
+      - key: SMM_SERVER_1_KEY
+        sync: false
+      - key: SMM_SERVER_2_KEY
+        sync: false

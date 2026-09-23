@@ -52,6 +52,10 @@ UPI_ID=vinit-godara@fam
 # MongoDB connection
 MONGODB_URI=mongodb+srv://username:password@cluster.example/numbott
 MONGODB_DB_NAME=numbott
+
+# SMM provider credentials (configure both servers in the deployment environment)
+SMM_SERVER_1_KEY=your_vip_provider_key
+SMM_SERVER_2_KEY=your_budget_provider_key
 ```
 
 ---
