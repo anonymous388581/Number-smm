@@ -294,6 +294,15 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
                 ))
             except Exception as e:
                 logger.error(f"Edit invert_media error: {e}")
+
+            try:
+                return await bot.edit_message(
+                    peer, edit_msg_id, message, buttons=buttons,
+                    parse_mode='html', link_preview=False,
+                )
+            except Exception as e:
+                logger.error(f"Dashboard edit fallback error: {e}")
+            return None
                 
         return await bot(functions.messages.SendMediaRequest(
             peer=peer_obj,
@@ -307,8 +316,14 @@ async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id
     except Exception as ex:
         logger.error(f"send_preview_on_top fallback: {ex}")
         if edit_msg_id:
-            try: return await bot.edit_message(peer, edit_msg_id, message, buttons=buttons, parse_mode='html', link_preview=True)
-            except: pass
+            try:
+                return await bot.edit_message(
+                    peer, edit_msg_id, message, buttons=buttons,
+                    parse_mode='html', link_preview=False,
+                )
+            except Exception as edit_ex:
+                logger.error(f"Dashboard edit fallback error: {edit_ex}")
+            return None
         return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
 
 
