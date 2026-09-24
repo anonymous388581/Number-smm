@@ -72,13 +72,13 @@ async def send_main_menu(bot, event, uid):
            f"<blockquote>🛠️ <b>𝐒ᴜᴘᴘᴏʀᴛ:</b> {support_handle}</blockquote>")
            
     buttons = [
-        [style_btn("🛒 BUY ACCOUNT", b"open_buy_categories", "success", icon=5440627033111557670)],
-        [style_btn("🚀 SOCIAL MEDIA SERVICES", b"smm_menu_main", "success", icon=5408995930416362034)],
-        [style_btn("💳 RECHARGE", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("👤 PROFILE", b"profile_stats", "primary", icon=6203982793379154737)],
-        [style_btn("📦 MY ORDERS", b"my_orders", "primary", icon=5409098988156629257), style_btn("💰 BALANCE", b"balance_info", "success", icon=5409320020058584473)],
-        [style_btn("🛍️ BUY SOURCE CODES", b"src_code_menu", "success", icon=5409320020058584473)],
-        [style_btn("🛍️ BUY PANELS", b"panels_menu", "success", icon=5409098988156629257)],
-        [style_btn("💬 MORE", b"more_menu", "primary", icon=6129627894349045589), style_url("📢 UPDATES ↗️", update_link, "primary", icon=6129732880529628243)]
+        [style_btn("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", b"open_buy_categories", "danger", icon=5440627033111557670)],
+        [style_btn("🚀 𝐒ᴏᴄɪᴀʟ ᴍᴇᴅɪᴀ sᴇʀᴠɪᴄᴇs", b"smm_menu_main", "success", icon=5408995930416362034)],
+        [style_btn("💳 𝐑ᴇᴄʜᴀʀɢᴇ", b"open_deposit_menu", "primary", icon=5409271925014801629), style_btn("👤 𝐏ʀᴏғɪʟᴇ", b"profile_stats", "primary", icon=6203982793379154737)],
+        [style_btn("📦 𝐌ʏ 𝐎ʀᴅᴇʀs", b"my_orders", "primary", icon=5409098988156629257), style_btn("💰 𝐁ᴀʟᴀɴᴄᴇ", b"balance_info", "primary", icon=5409320020058584473)],
+        [style_btn("🛍️ 𝐁ᴜʏ 𝐒ᴏᴜʀᴄᴇ 𝐂ᴏᴅᴇs", b"src_code_menu", "success", icon=5409320020058584473)],
+        [style_btn("🛍️ 𝐁ᴜʏ 𝐏ᴀɴᴇʟs", b"panels_menu", "danger", icon=5409098988156629257)],
+        [style_btn("💬 𝐌ᴏʀᴇ", b"more_menu", "primary", icon=6129627894349045589), style_url("📢 𝐔ᴘᴅᴀᴛᴇs ↗️", update_link, "danger", icon=6129732880529628243)]
     ]
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
