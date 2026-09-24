@@ -198,18 +198,18 @@ async def create_auto_upi_payment(event, amount):
         qr_file.seek(0)
         await bot.send_file(uid, qr_file)
         payment_message = (
-            "🏦 <b>AUTOMATIC PAYMENT (UPI)</b>\n\n"
-            f"💰 Amount: ₹{order['payable_amount']}\n"
-            f"🆔 Order ID: {order['order_id']}\n\n"
-            "👇 Scan the QR above.\n"
-            "Click ✅ Check Payment Status after paying."
+            "🏦 𝐀ᴜᴛᴏᴍᴀᴛɪᴄ 𝐏ᴀʏᴍᴇɴᴛ (𝐔𝐏𝐈)\n\n"
+            f"💰 𝐀ᴍᴏᴜɴᴛ: ₹{order['payable_amount']}\n"
+            f"🆔 𝐎ʀᴅᴇʀ 𝐈ᴅ: {order['order_id']}\n\n"
+            "👇 𝐒ᴄᴀɴ ᴛʜᴇ 𝐐ʀ ᴀʙᴏᴠᴇ.\n"
+            "𝐂ʟɪᴄᴋ ✅ 𝐂ʜᴇᴄᴋ 𝐏ᴀʏᴍᴇɴᴛ 𝐒ᴛᴀᴛᴜs ᴀғᴛᴇʀ ᴘᴀʏɪɴɢ."
         )
         await bot.send_message(
             uid,
             payment_message,
             buttons=[
-                [Button.inline("✅ CHECK PAYMENT STATUS", b"auto_upi_check")],
-                [Button.inline("❌ CANCEL", b"auto_upi_cancel")],
+                [Button.inline("✅ 𝐂ʜᴇᴄᴋ 𝐏ᴀʏᴍᴇɴᴛ 𝐒ᴛᴀᴛᴜs", b"auto_upi_check")],
+                [Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", b"auto_upi_cancel")],
             ],
         )
     except Exception as exc:
@@ -268,8 +268,8 @@ def register_deposit(bot):
             return
         not_found_text = payment_not_found_text()
         not_found_buttons = [
-            [Button.inline("✅ CHECK PAYMENT STATUS", b"auto_upi_check")],
-            [Button.inline("❌ CANCEL", b"auto_upi_cancel")],
+            [Button.inline("✅ 𝐂ʜᴇᴄᴋ 𝐏ᴀʏᴍᴇɴᴛ 𝐒ᴛᴀᴛᴜs", b"auto_upi_check")],
+            [Button.inline("❌ 𝐂ᴀɴᴄᴇʟ", b"auto_upi_cancel")],
         ]
         await _edit_auto_upi_status_message(e, not_found_text, buttons=not_found_buttons)
         await e.answer("Payment not found yet.", alert=False)
