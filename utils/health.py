@@ -1,5 +1,6 @@
 import os
 import logging
+from pathlib import Path
 from aiohttp import web
 
 logger = logging.getLogger("health_server")
@@ -27,12 +28,17 @@ async def root_endpoint(request: web.Request):
         content_type="text/plain"
     )
 
+async def terms_endpoint(request: web.Request):
+    return web.FileResponse(Path(__file__).resolve().parent.parent / "terms.html")
+
 def create_health_app() -> web.Application:
     app = web.Application()
     # Explicit routes for GET, HEAD, and any HTTP method
     app.router.add_route("*", "/", root_endpoint)
     app.router.add_route("*", "/health", health_endpoint)
     app.router.add_route("*", "/ping", root_endpoint)
+    app.router.add_route("*", "/terms", terms_endpoint)
+    app.router.add_route("*", "/terms/", terms_endpoint)
     # Catch-all route so ANY path requested by uptime monitoring returns 200 OK
     app.router.add_route("*", "/{tail:.*}", root_endpoint)
     return app

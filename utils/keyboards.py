@@ -14,7 +14,7 @@ def style_url(text, url, style_type=None, icon=None):
 
 
 def get_terms_buttons():
-    t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else "https://t.me/sivamXpruff"
+    t_url = TERMS_URL or "/terms/"
     return [
         [Button.url("📜 Read Terms & Conditions", t_url)],
         [style_btn("𝐀ᴄᴄᴇᴘᴛ", b"tc_accept", style_type='success', icon=5409380965644514142), 
@@ -44,7 +44,7 @@ def get_persistent_menu(uid):
 def get_support_buttons():
     urls = get_fsub_urls()
     sup_url = get_support_url()
-    t_url = TERMS_URL if (TERMS_URL and str(TERMS_URL).strip().startswith("http")) else sup_url
+    t_url = TERMS_URL or "/terms/"
     buttons = [
         [Button.url("📩 Support", sup_url)],
         [Button.url("📜 Terms & Conditions", t_url)]
