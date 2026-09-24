@@ -274,56 +274,24 @@ def to_small_caps(text):
     return "".join(SMALL_CAPS_MAP.get(c, c) for c in str(text))
 
 async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id=None):
-    """Sends or edits a message with WebPage link preview inverted ON TOP."""
+    """Sends or edits the dashboard as one photo message with a caption."""
     try:
-        text, entities = await bot._parse_message_text(message, 'html')
-        markup = bot.build_reply_markup(buttons) if buttons else None
-        peer_obj = await bot.get_input_entity(peer)
-        media_obj = types.InputMediaWebPage(url=url, force_large_media=True)
-        
         if edit_msg_id:
             try:
-                return await bot(functions.messages.EditMessageRequest(
-                    peer=peer_obj,
-                    id=edit_msg_id,
-                    message=text,
-                    entities=entities,
-                    media=media_obj,
-                    invert_media=True,
-                    reply_markup=markup
-                ))
+                return await bot.edit_message(
+                    peer, edit_msg_id, message, file=url,
+                    force_document=False, buttons=buttons, parse_mode='html',
+                )
             except Exception as e:
-                logger.error(f"Edit invert_media error: {e}")
+                logger.error(f"Dashboard photo edit error: {e}")
+            return None
 
-            try:
-                return await bot.edit_message(
-                    peer, edit_msg_id, message, buttons=buttons,
-                    parse_mode='html', link_preview=False,
-                )
-            except Exception as e:
-                logger.error(f"Dashboard edit fallback error: {e}")
-            return None
-                
-        return await bot(functions.messages.SendMediaRequest(
-            peer=peer_obj,
-            media=media_obj,
-            message=text,
-            entities=entities,
-            invert_media=True,
-            reply_markup=markup,
-            random_id=random.randint(0, 2**63 - 1)
-        ))
+        return await bot.send_file(
+            peer, url, caption=message, buttons=buttons,
+            parse_mode='html', force_document=False,
+        )
     except Exception as ex:
-        logger.error(f"send_preview_on_top fallback: {ex}")
-        if edit_msg_id:
-            try:
-                return await bot.edit_message(
-                    peer, edit_msg_id, message, buttons=buttons,
-                    parse_mode='html', link_preview=False,
-                )
-            except Exception as edit_ex:
-                logger.error(f"Dashboard edit fallback error: {edit_ex}")
-            return None
-        return await bot.send_message(peer, message, buttons=buttons, parse_mode='html', link_preview=True)
+        logger.error(f"Dashboard photo send error: {ex}")
+        return None
 
 

@@ -67,8 +67,7 @@ async def send_main_menu(bot, event, uid):
     update_link = JOIN_URLS[0] if JOIN_URLS else support_url
     styled_name = to_small_caps(bot_name)
     
-    banner_link = f"<a href='{html.escape(start_img, quote=True)}'>&#8203;</a>" if start_img else ""
-    msg = (f"{banner_link}💬 <b>{html.escape(styled_name)}</b>\n\n"
+    msg = (f"💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
            f"👥 <b>𝐍ᴀᴍᴇ:</b> {html.escape(first_name)}\n"
            f"🪪 <b>𝐔sᴇʀ 𝐈𝐃:</b> <code>{uid}</code>\n"
