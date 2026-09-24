@@ -8,6 +8,7 @@ from plugins.callbacks import register_callbacks
 from plugins.smm import register_smm
 from plugins.source_codes import register_source_codes
 from plugins.panels import register_panels
+from plugins.banner_management import register_banner_management
 
 def register_all_handlers(bot):
     register_start(bot)
@@ -20,3 +21,4 @@ def register_all_handlers(bot):
     register_smm(bot)
     register_source_codes(bot)
     register_panels(bot)
+    register_banner_management(bot)

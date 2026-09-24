@@ -10,12 +10,43 @@ from datetime import datetime, timezone
 
 from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError
+import gridfs
+
+
+class _BannerFileStore:
+    def __init__(self, database):
+        try:
+            self.store = gridfs.GridFS(database, collection="banner_files")
+            self.fallback = None
+        except TypeError:
+            self.store = None
+            self.fallback = database.banner_files
+
+    def put(self, content, filename, content_type):
+        if self.store:
+            return self.store.put(content, filename=filename, content_type=content_type)
+        identifier = uuid.uuid4().hex
+        self.fallback.insert_one({"_id": identifier, "data": content, "filename": filename, "content_type": content_type})
+        return identifier
+
+    def get(self, identifier):
+        if self.store:
+            return self.store.get(identifier)
+        row = self.fallback.find_one({"_id": identifier})
+        if not row:
+            raise KeyError(identifier)
+        return type("StoredFile", (), {"read": lambda self: row["data"]})()
+
+    def delete(self, identifier):
+        if self.store:
+            return self.store.delete(identifier)
+        self.fallback.delete_one({"_id": identifier})
 
 
 COLLECTIONS = (
     "users", "settings", "stock", "auto_prices", "spamfree_prices", "deposits",
     "upi_orders", "orders", "custom_payments", "admins", "custom_countries",
-    "smm_orders", "source_codes", "panels", "redeemed_transactions", "telegram_sessions",
+    "smm_orders", "source_codes", "panels", "redeemed_transactions", "telegram_sessions", "banners",
 )
 
 
@@ -38,6 +69,7 @@ class MongoRepository:
                 client = MongoClient(self.uri, serverSelectionTimeoutMS=10000)
         self.client = client
         self.db = client[self.database_name]
+        self.banner_files = _BannerFileStore(self.db)
 
     def ping(self):
         return self.client.admin.command("ping")
@@ -63,6 +95,46 @@ class MongoRepository:
                 self.db[collection].create_index([(field, direction)])
         self.db.deposits.create_index([("source_key", ASCENDING)], unique=True, sparse=True)
         self.db.telegram_sessions.create_index([("account_key", ASCENDING)], unique=True, sparse=True)
+        self.db.banners.create_index([("key", ASCENDING)], unique=True)
+
+    def get_banner(self, key, enabled_only=False):
+        query = {"key": str(key)}
+        if enabled_only:
+            query["enabled"] = True
+        return self.db.banners.find_one(query)
+
+    def save_banner(self, key, content, file_id):
+        now = self._now()
+        existing = self.get_banner(key)
+        gridfs_id = self.banner_files.put(content, filename=f"{key}.jpg", content_type="image/jpeg")
+        document = {
+            "key": str(key), "enabled": bool(existing.get("enabled", False)) if existing else False,
+            "file_id": str(file_id), "gridfs_id": gridfs_id,
+            "created_at": existing.get("created_at", now) if existing else now,
+            "updated_at": now,
+        }
+        self.db.banners.replace_one({"key": str(key)}, document, upsert=True)
+        if existing and existing.get("gridfs_id"):
+            try:
+                self.banner_files.delete(existing["gridfs_id"])
+            except Exception:
+                pass
+        return self.get_banner(key)
+
+    def set_banner_enabled(self, key, enabled):
+        return self.db.banners.find_one_and_update(
+            {"key": str(key)}, {"$set": {"enabled": bool(enabled), "updated_at": self._now()}},
+            return_document=ReturnDocument.AFTER,
+        )
+
+    def get_banner_content(self, key, enabled_only=True):
+        banner = self.get_banner(key, enabled_only=enabled_only)
+        if not banner or not banner.get("gridfs_id"):
+            return None
+        try:
+            return self.banner_files.get(banner["gridfs_id"]).read()
+        except Exception:
+            return None
 
     @staticmethod
     def _now():

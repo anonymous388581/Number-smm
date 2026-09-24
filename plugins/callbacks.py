@@ -9,6 +9,7 @@ from plugins.start import send_main_menu
 from utils.helpers import check_channel_joined
 from utils.keyboards import style_btn, style_url
 from utils.lzt import COUNTRY_TO_LZT
+from utils.banners import send_banner
 
 
 def _format_order_date(value):
@@ -241,6 +242,7 @@ def register_callbacks(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^(📦 𝐌ʏ 𝐎ʀᴅᴇʀs|📦 My Orders)$"))
     async def msg_my_orders(e):
         uid = e.sender_id
+        await send_banner(bot, e, "orders")
         rows = repository.get_orders_for_user(uid)
         if not rows:
             return await e.respond(f"<blockquote>{PE_GIFT} <b>𝐌ʏ 𝐎ʀᴅᴇʀs</b></blockquote>\n\n<blockquote>𝐍ᴏ ᴏʀᴅᴇʀs ʏᴇᴛ. 𝐁ᴜʏ ʏᴏᴜʀ ғɪʀsᴛ ᴀᴄᴄᴏᴜɴᴛ!</blockquote>")
@@ -254,6 +256,7 @@ def register_callbacks(bot):
     @bot.on(events.NewMessage(pattern=r"(?i)^(💰 𝐁ᴀʟᴀɴᴄᴇ|💰 Balance)$"))
     async def msg_balance(e):
         uid = e.sender_id
+        await send_banner(bot, e, "balance")
         row = cur.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
         bal = row[0] if row else 0
         msg = (f"<blockquote>{PE_CROWN} <b>𝐘ᴏᴜʀ 𝐁ᴀʟᴀɴᴄᴇ</b></blockquote>\n\n"
@@ -263,6 +266,7 @@ def register_callbacks(bot):
 
     @bot.on(events.NewMessage(pattern=r"(?i)^(📩 𝐒ᴜᴘᴘᴏʀᴛ|📩 Support)$"))
     async def msg_support(e):
+        await send_banner(bot, e, "support")
         url = get_support_url()
         msg = f"<blockquote>📩 <b>𝐒ᴜᴘᴘᴏʀᴛ</b></blockquote>\n\n<blockquote>𝐅ᴏʀ ᴀɴʏ ɪssᴜᴇs ᴏʀ ǫᴜᴇsᴛɪᴏɴs, ᴄᴏɴᴛᴀᴄᴛ ᴏᴜʀ sᴜᴘᴘᴏʀᴛ:</blockquote>"
         btns = [[Button.url("📩 𝐂ᴏɴᴛᴀᴄᴛ 𝐒ᴜᴘᴘᴏʀᴛ", url)]]
