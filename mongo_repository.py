@@ -124,6 +124,19 @@ class MongoRepository:
                 pass
         return self.get_banner(key)
 
+    def save_banner_url(self, key, url):
+        now = self._now()
+        existing = self.get_banner(key)
+        document = {
+            "key": str(key),
+            "enabled": bool(existing.get("enabled", False)) if existing else False,
+            "url": str(url).strip(),
+            "created_at": existing.get("created_at", now) if existing else now,
+            "updated_at": now,
+        }
+        self.db.banners.replace_one({"key": str(key)}, document, upsert=True)
+        return self.get_banner(key)
+
     def set_banner_enabled(self, key, enabled):
         return self.db.banners.find_one_and_update(
             {"key": str(key)}, {"$set": {"enabled": bool(enabled), "updated_at": self._now()}},

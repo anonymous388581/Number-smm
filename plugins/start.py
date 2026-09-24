@@ -1,7 +1,7 @@
 import html
 from telethon import events, types, Button
 from telethon.errors import MessageNotModifiedError
-from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_admin, get_support_url, get_start_image_url
+from database import cur, db, ensure_user, is_user_banned, is_bot_online, is_admin, get_support_url, get_start_image_url, repository
 from utils.keyboards import get_persistent_menu, get_terms_buttons, get_join_buttons, style_btn, style_url
 from utils.helpers import check_channel_joined, to_small_caps, send_preview_on_top
 from config import PE_FLOWER, PE_LOCATION, P_OFF, P_INR, JOIN_URLS, TERMS_URL, logger
@@ -56,14 +56,19 @@ async def send_main_menu(bot, event, uid):
         first_name = "User"
         username = "None"
         
-    start_img = get_start_image_url()
+    home_banner = repository.get_banner("home")
+    if home_banner:
+        start_img = home_banner.get("url") if home_banner.get("enabled") else None
+    else:
+        start_img = get_start_image_url()
     support_url = get_support_url()
     support_handle = f"@{support_url.split('/')[-1]}" if support_url.startswith("https://t.me/") else support_url
     
     update_link = JOIN_URLS[0] if JOIN_URLS else support_url
     styled_name = to_small_caps(bot_name)
     
-    msg = (f"<a href='{start_img}'>&#8203;</a>💬 <b>{html.escape(styled_name)}</b>\n\n"
+    banner_link = f"<a href='{html.escape(start_img, quote=True)}'>&#8203;</a>" if start_img else ""
+    msg = (f"{banner_link}💬 <b>{html.escape(styled_name)}</b>\n\n"
            f"<blockquote expandable>"
            f"👥 <b>𝐍ᴀᴍᴇ:</b> {html.escape(first_name)}\n"
            f"🪪 <b>𝐔sᴇʀ 𝐈𝐃:</b> <code>{uid}</code>\n"
@@ -82,7 +87,12 @@ async def send_main_menu(bot, event, uid):
     ]
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
-    await send_preview_on_top(bot, uid, msg, start_img, buttons=buttons, edit_msg_id=edit_id)
+    if start_img:
+        await send_preview_on_top(bot, uid, msg, start_img, buttons=buttons, edit_msg_id=edit_id)
+    elif edit_id:
+        await event.edit(msg, buttons=buttons, parse_mode="html")
+    else:
+        await bot.send_message(uid, msg, buttons=buttons, parse_mode="html")
 
 
 def register_start(bot):

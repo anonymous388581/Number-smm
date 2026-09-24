@@ -1,3 +1,4 @@
+import html
 from io import BytesIO
 
 from telethon import events, types
@@ -6,6 +7,7 @@ from database import repository
 
 
 BANNER_SECTIONS = {
+    "home": "🏠 Home / Dashboard",
     "buy": "🛒 Buy Account",
     "deposit": "💳 Deposit",
     "profile": "👤 Profile",
@@ -18,9 +20,19 @@ BANNER_SECTIONS = {
 
 async def send_bannered_message(bot, event, key, caption, buttons=None, enabled_only=True):
     banner = repository.get_banner(key, enabled_only=enabled_only)
-    if not banner or not banner.get("file_id"):
+    if not banner:
         return False
     try:
+        if banner.get("url"):
+            await bot.send_message(
+                event.chat_id,
+                f"{caption}\n<a href='{html.escape(banner['url'], quote=True)}'>&#8203;</a>",
+                buttons=buttons, parse_mode="html",
+                link_preview=True,
+            )
+            return True
+        if not banner.get("file_id"):
+            return False
         if isinstance(event, events.CallbackQuery.Event):
             try:
                 await event.edit(caption, buttons=buttons, parse_mode="html")

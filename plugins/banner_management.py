@@ -1,6 +1,6 @@
 from telethon import events, Button
 
-from database import is_admin, has_perm, repository
+from database import get_start_image_url, is_admin, has_perm, repository
 from utils.banners import BANNER_SECTIONS
 from utils.banners import send_bannered_message
 from utils.keyboards import style_btn
@@ -11,12 +11,19 @@ def _allowed(uid):
     return is_admin(uid) and has_perm(uid, "p_settings")
 
 
+def _banner_for_menu(key):
+    banner = repository.get_banner(key)
+    if banner or key != "home":
+        return banner
+    return {"enabled": bool(get_start_image_url()), "url": get_start_image_url()}
+
+
 async def banner_menu(event):
     if not _allowed(event.sender_id):
         return await event.answer("Access denied.", alert=True)
     buttons = []
     for key, label in BANNER_SECTIONS.items():
-        banner = repository.get_banner(key)
+        banner = _banner_for_menu(key)
         status = "🟢 ON" if banner and banner.get("enabled") else "🔴 OFF"
         buttons.append([style_btn(f"{label}: {status}", f"banner_section|{key}", "primary")])
     buttons.append([style_btn("🔙 Back to Admin", "adm_adminmain", "danger")])
@@ -26,7 +33,7 @@ async def banner_menu(event):
 async def banner_section(event, key):
     if not _allowed(event.sender_id) or key not in BANNER_SECTIONS:
         return await event.answer("Access denied.", alert=True)
-    banner = repository.get_banner(key)
+    banner = _banner_for_menu(key)
     enabled = bool(banner and banner.get("enabled"))
     buttons = [
         [style_btn("🔴 Turn OFF" if enabled else "🟢 Turn ON", f"banner_toggle|{key}", "danger" if enabled else "success")],
@@ -52,6 +59,10 @@ def register_banner_management(bot):
             return await e.answer("Access denied.", alert=True)
         banner = repository.get_banner(key)
         if not banner:
+            if key == "home":
+                repository.save_banner_url(key, get_start_image_url())
+                repository.set_banner_enabled(key, False)
+                return await banner_section(e, key)
             return await e.answer("Upload a banner first.", alert=True)
         repository.set_banner_enabled(key, not bool(banner.get("enabled")))
         await banner_section(e, key)
@@ -61,22 +72,37 @@ def register_banner_management(bot):
         key = e.pattern_match.group(1).decode()
         if not _allowed(e.sender_id) or key not in BANNER_SECTIONS:
             return await e.answer("Access denied.", alert=True)
-        admin_state[e.sender_id] = {"action": "banner_upload", "key": key}
-        await e.edit(f"Send the Telegram photo for <b>{BANNER_SECTIONS[key]}</b>.", buttons=[[Button.inline("Cancel", f"banner_section|{key}")]])
+        action = "banner_url" if key == "home" else "banner_upload"
+        admin_state[e.sender_id] = {"action": action, "key": key}
+        prompt = "Send the image URL" if key == "home" else "Send the Telegram photo"
+        await e.edit(f"{prompt} for <b>{BANNER_SECTIONS[key]}</b>.", buttons=[[Button.inline("Cancel", f"banner_section|{key}")]])
 
     @bot.on(events.CallbackQuery(pattern=r"^banner_preview\|([^|]+)$"))
     async def cb_banner_preview(e):
         key = e.pattern_match.group(1).decode()
         if not _allowed(e.sender_id) or key not in BANNER_SECTIONS:
             return await e.answer("Access denied.", alert=True)
-        banner = repository.get_banner(key, enabled_only=False)
-        if not banner or not banner.get("file_id"):
+        banner = _banner_for_menu(key)
+        if not banner or not (banner.get("file_id") or banner.get("url")):
             return await e.answer("No banner uploaded.", alert=True)
+        if key == "home" and not repository.get_banner(key) and banner.get("url"):
+            repository.save_banner_url(key, banner["url"])
         if not await send_bannered_message(
             bot, e, key, BANNER_SECTIONS[key], enabled_only=False,
         ):
             return await e.answer("Preview could not be sent.", alert=True)
         await e.answer("Preview sent.")
+
+    @bot.on(events.NewMessage(func=lambda e: e.is_private and isinstance(admin_state.get(e.sender_id), dict) and admin_state[e.sender_id].get("action") == "banner_url"))
+    async def msg_banner_url(e):
+        if not _allowed(e.sender_id):
+            return
+        state = admin_state.pop(e.sender_id)
+        url = (e.raw_text or "").strip()
+        if not url.startswith(("http://", "https://")):
+            return await e.reply("❌ Please send a valid image URL starting with http:// or https://.")
+        repository.save_banner_url(state["key"], url)
+        await e.reply("✅ Home banner URL saved. It is OFF until you turn it ON.")
 
     @bot.on(events.NewMessage(func=lambda e: e.is_private and isinstance(admin_state.get(e.sender_id), dict) and admin_state[e.sender_id].get("action") == "banner_upload"))
     async def msg_banner_upload(e):
