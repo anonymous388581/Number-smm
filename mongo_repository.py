@@ -487,6 +487,13 @@ class MongoRepository:
             sort=[("created_at", DESCENDING)],
         )
 
+    def get_latest_auto_upi_order(self, user_id):
+        """Return the user's newest Auto UPI order, regardless of status."""
+        return self.db.upi_orders.find_one(
+            {"user_id": int(user_id)},
+            sort=[("created_at", DESCENDING)],
+        )
+
     def get_pending_auto_upi_orders(self):
         """Return all pending Auto UPI orders for background verification."""
         return list(self.db.upi_orders.find({"status": "pending"}).sort("created_at", ASCENDING))
@@ -529,6 +536,7 @@ class MongoRepository:
                 "status": "paid",
                 "paid_at": now,
                 "verification": dict(payment),
+                "verification_status": "AUTO VERIFIED",
             }},
             return_document=ReturnDocument.BEFORE,
             **find_kwargs,
@@ -542,6 +550,8 @@ class MongoRepository:
                 "user_id": existing.get("user_id") if existing else None,
                 "amount": existing.get("payable_amount") if existing else None,
                 "order_id": existing.get("order_id") if existing else None,
+                "previous_balance": existing.get("previous_balance") if existing else None,
+                "balance": existing.get("balance") if existing else None,
             }
 
         amount = int(order.get("payable_amount", order.get("amount", 0)))
@@ -553,6 +563,14 @@ class MongoRepository:
         )
         if user is None:
             raise ValueError(f"user {order['user_id']} does not exist")
+        self.db.upi_orders.update_one(
+            {"_id": str(order_id), "status": "paid"},
+            {"$set": {
+                "previous_balance": user["balance"] - amount,
+                "balance": user["balance"],
+            }},
+            **find_kwargs,
+        )
         return {
             "credited": True,
             "already_processed": False,
@@ -582,6 +600,8 @@ class MongoRepository:
                 "user_id": existing.get("user_id") if existing else None,
                 "amount": existing.get("payable_amount") if existing else None,
                 "order_id": existing.get("order_id") if existing else None,
+                "previous_balance": existing.get("previous_balance") if existing else None,
+                "balance": existing.get("balance") if existing else None,
             }
 
         amount = int(order.get("payable_amount", order.get("amount", 0)))
@@ -595,7 +615,13 @@ class MongoRepository:
                 raise ValueError(f"user {order['user_id']} does not exist")
             self.db.upi_orders.update_one(
                 {"_id": str(order_id), "status": "processing"},
-                {"$set": {"status": "paid", "paid_at": now}},
+                {"$set": {
+                    "status": "paid",
+                    "paid_at": now,
+                    "verification_status": "AUTO VERIFIED",
+                    "previous_balance": user["balance"] - amount,
+                    "balance": user["balance"],
+                }},
             )
             return {
                 "credited": True,

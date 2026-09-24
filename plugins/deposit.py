@@ -167,6 +167,14 @@ def register_deposit(bot):
 
     @bot.on(events.CallbackQuery(pattern=b"^auto_upi_check$"))
     async def cb_auto_upi_check(e):
+        checking_text = "⏳ Checking your payment"
+        try:
+            if e.message.message != checking_text:
+                await e.edit(checking_text)
+        except MessageNotModifiedError:
+            pass
+        except Exception:
+            logger.exception("AUTO_UPI_CHECK: status message update failed user_id=%s", e.sender_id)
         logger.info("AUTO_UPI_CHECK: callback received user_id=%s", e.sender_id)
         pending_order = repository.get_current_pending_auto_upi_order(e.sender_id)
         logger.info(
