@@ -81,7 +81,8 @@ CHECK_CHANNELS = env_list("CHECK_CHANNELS", "")
 JOIN_URLS = env_list("JOIN_URLS", "")
 
 # LINKS & MEDIA
-TERMS_URL = os.getenv("TERMS_URL", "").strip() or "/terms/"
+public_base_url = (os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "https://numbott-telethon.onrender.com").strip().rstrip("/")
+TERMS_URL = os.getenv("TERMS_URL", "").strip() or f"{public_base_url}/terms/"
 CWALLET_QR = os.getenv("CWALLET_QR", "")
 CWALLET_ID = os.getenv("CWALLET_ID", "")
 
