@@ -1,5 +1,6 @@
 import asyncio
 import os
+import urllib.parse
 import unittest
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -18,7 +19,7 @@ from mongo_repository import MongoRepository
 from utils import auto_upi_verifier
 from utils.auto_upi_verifier import payment_not_found_text
 from utils.imap_verifier import verify_auto_upi_order
-from plugins.deposit import register_deposit
+from plugins.deposit import _build_auto_upi_uri, register_deposit
 
 
 class FakeImap:
@@ -88,6 +89,33 @@ class AutoUpiVerificationTests(unittest.TestCase):
         self.assertEqual(result[0], True)
         self.assertEqual(result[1]["purpose"], order["purpose"])
         self.assertEqual(result[1]["amount"], order["payable_amount"])
+
+    def test_matches_fampay_normalized_purpose_without_hyphens(self):
+        order = pending_order(purpose="ORD-20260924-CD937E82")
+        result = self.verify_email(
+            order,
+            payment_email("ORD20260924CD937E82", order["payable_amount"], datetime.now(timezone.utc)),
+        )
+        self.assertEqual(result[0], True)
+        self.assertEqual(result[1]["purpose"], order["purpose"])
+
+    def test_rejects_different_order_id_after_normalization(self):
+        order = pending_order(purpose="ORD-20260924-CD937E82")
+        result = self.verify_email(
+            order,
+            payment_email("ORD-20260924-CD937E83", order["payable_amount"], datetime.now(timezone.utc)),
+        )
+        self.assertEqual(result[0], False)
+
+    def test_qr_uri_preserves_order_id_in_tn_and_tr(self):
+        order_id = "ORD-20260924-CD937E82"
+        uri = _build_auto_upi_uri("merchant@upi", {
+            "order_id": order_id,
+            "payable_amount": 100,
+        })
+        decoded = urllib.parse.parse_qs(urllib.parse.urlsplit(uri).query)
+        self.assertEqual(decoded["tn"], [order_id])
+        self.assertEqual(decoded["tr"], [order_id])
 
     def test_rejects_wrong_amount_and_wrong_purpose(self):
         order = pending_order()
