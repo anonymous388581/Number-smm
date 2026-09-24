@@ -269,29 +269,63 @@ SMALL_CAPS_MAP = {
     'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ', 'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ', 'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ', 'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ'
 }
 
+_DASHBOARD_PHOTO_TIMEOUT_SECONDS = 8
+
 def to_small_caps(text):
     if not text: return ""
     return "".join(SMALL_CAPS_MAP.get(c, c) for c in str(text))
 
-async def send_preview_on_top(bot, peer, message, url, buttons=None, edit_msg_id=None):
-    """Sends or edits the dashboard as one photo message with a caption."""
-    try:
-        if edit_msg_id:
+async def send_preview_on_top(
+    bot, peer, message, url, buttons=None, edit_msg_id=None, edit_has_media=False
+):
+    """Show the dashboard photo when available, otherwise show its text dashboard."""
+
+    async def send_text_fallback():
+        if edit_msg_id and not edit_has_media:
             try:
                 return await bot.edit_message(
-                    peer, edit_msg_id, message, file=url,
-                    force_document=False, buttons=buttons, parse_mode='html',
+                    peer, edit_msg_id, message, buttons=buttons, parse_mode="html"
                 )
-            except Exception as e:
-                logger.error(f"Dashboard photo edit error: {e}")
+            except Exception as edit_error:
+                logger.warning(f"Dashboard text edit fallback failed: {edit_error}")
+
+        if edit_msg_id:
+            try:
+                await bot.delete_messages(peer, edit_msg_id)
+            except Exception as delete_error:
+                logger.warning(f"Could not replace previous dashboard message: {delete_error}")
+
+        try:
+            return await bot.send_message(
+                peer, message, buttons=buttons, parse_mode="html"
+            )
+        except Exception as fallback_error:
+            logger.error(f"Dashboard text fallback error: {fallback_error}", exc_info=True)
             return None
 
-        return await bot.send_file(
-            peer, url, caption=message, buttons=buttons,
-            parse_mode='html', force_document=False,
+    if edit_msg_id:
+        try:
+            return await asyncio.wait_for(
+                bot.edit_message(
+                    peer, edit_msg_id, message, file=url,
+                    force_document=False, buttons=buttons, parse_mode="html",
+                ),
+                timeout=_DASHBOARD_PHOTO_TIMEOUT_SECONDS,
+            )
+        except Exception as ex:
+            logger.error(f"Dashboard photo edit error ({type(ex).__name__}): {ex}")
+            return await send_text_fallback()
+
+    try:
+        return await asyncio.wait_for(
+            bot.send_file(
+                peer, url, caption=message, buttons=buttons,
+                parse_mode="html", force_document=False,
+            ),
+            timeout=_DASHBOARD_PHOTO_TIMEOUT_SECONDS,
         )
     except Exception as ex:
-        logger.error(f"Dashboard photo send error: {ex}")
-        return None
+        logger.error(f"Dashboard photo send error ({type(ex).__name__}): {ex}")
+        return await send_text_fallback()
 
 

@@ -87,7 +87,11 @@ async def send_main_menu(bot, event, uid):
     
     edit_id = event.message_id if isinstance(event, events.CallbackQuery.Event) else None
     if start_img:
-        await send_preview_on_top(bot, uid, msg, start_img, buttons=buttons, edit_msg_id=edit_id)
+        edit_has_media = bool(getattr(getattr(event, "message", None), "media", None))
+        await send_preview_on_top(
+            bot, uid, msg, start_img, buttons=buttons,
+            edit_msg_id=edit_id, edit_has_media=edit_has_media,
+        )
     elif edit_id:
         await event.edit(msg, buttons=buttons, parse_mode="html")
     else:
