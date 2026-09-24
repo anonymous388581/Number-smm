@@ -30,15 +30,19 @@ def get_join_buttons():
 def get_persistent_menu(uid):
     from database import is_admin
     from telethon import Button
+
+    updates_url = JOIN_URLS[0] if JOIN_URLS else get_support_url()
     buttons = [
-        [Button.text("🛒 𝐁ᴜʏ 𝐀ᴄᴄᴏᴜɴᴛ", resize=True, style="success", icon=5440627033111557670), Button.text("💳 𝐃ᴇᴘᴏsɪᴛ", style="primary", icon=5409271925014801629)],
-        [Button.text("👤 𝐏ʀᴏғɪʟᴇ", style="primary", icon=6203982793379154737), Button.text("📦 𝐌ʏ 𝐎ʀᴅᴇʀs", style="primary", icon=5409098988156629257)],
-        [Button.text("💰 𝐁ᴀʟᴀɴᴄᴇ", style="success", icon=5409320020058584473), Button.text("📊 𝐒ᴛᴏᴄᴋ", style="primary", icon=6129627894349045589)],
-        [Button.text("🎁 𝐑ᴇғᴇʀ", style="success", icon=5354889508674360491), Button.text("📩 𝐒ᴜᴘᴘᴏʀᴛ", style="primary", icon=6129732880529628243)],
-        [Button.text("🏠 𝐒ᴛᴀʀᴛ", style="success", icon=6129399728506412489), Button.text("🔻 𝐂ʟᴏsᴇ", style="danger", icon=6129812419028982717)]
+        [Button.text("🛒 BUY ACCOUNT", resize=True, style="success", icon=5440627033111557670)],
+        [Button.text("🚀 SOCIAL MEDIA SERVICES", resize=True, style="success", icon=5408995930416362034)],
+        [Button.text("💳 RECHARGE", style="primary", icon=5409271925014801629), Button.text("👤 PROFILE", style="primary", icon=6203982793379154737)],
+        [Button.text("📦 MY ORDERS", style="primary", icon=5409098988156629257), Button.text("💰 BALANCE", style="success", icon=5409320020058584473)],
+        [Button.text("🛍️ BUY SOURCE CODES", resize=True, style="success", icon=5409320020058584473)],
+        [Button.text("🛍️ BUY PANELS", resize=True, style="success", icon=5409098988156629257)],
+        [Button.text("💬 MORE", style="primary", icon=6129627894349045589), Button.url("📢 UPDATES ↗️", updates_url, style="primary", icon=6129732880529628243)]
     ]
     if is_admin(uid):
-        buttons.append([Button.text("🔐 𝐀ᴅᴍɪɴ 𝐏ᴀɴᴇʟ", style="danger", icon=5409166771330494453)])
+        buttons.append([Button.text("🔐 ADMIN PANEL", style="danger", icon=5409166771330494453)])
     return buttons
 
 def get_support_buttons():
