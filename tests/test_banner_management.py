@@ -1,4 +1,6 @@
 import os
+import asyncio
+from unittest.mock import patch
 
 os.environ.setdefault("API_ID", "1")
 os.environ.setdefault("API_HASH", "test-api-hash")
@@ -8,7 +10,8 @@ os.environ.setdefault("MONGODB_URI", "mongomock://banner-tests")
 import mongomock
 
 from mongo_repository import MongoRepository
-from utils.banners import BANNER_SECTIONS
+from utils.banners import BANNER_SECTIONS, send_bannered_message
+from plugins import buy
 
 
 def test_all_banner_sections_are_independent_and_persistent():
@@ -42,3 +45,45 @@ def test_all_banner_sections_are_independent_and_persistent():
     assert restarted.get_banner_content("buy") == b"replacement"
     assert restarted.get_banner("deposit")["enabled"] is False
     assert restarted.get_banner_content("missing") is None
+
+
+def test_buy_account_uses_one_uploaded_photo_message_with_caption_and_buttons():
+    class BannerRepository:
+        def get_banner(self, key, enabled_only=False):
+            return {"key": key, "file_id": "telegram-id", "filename": "buy.png"}
+
+        def get_banner_content(self, key, enabled_only=True):
+            return b"image-bytes"
+
+    class FakeBot:
+        def __init__(self):
+            self.sent = []
+
+        async def upload_file(self, image):
+            assert image.name == "buy.png"
+            return b"uploaded-photo"
+
+        async def send_file(self, chat_id, media, caption=None, buttons=None, parse_mode=None, force_document=None):
+            self.sent.append((chat_id, media, caption, buttons, force_document))
+
+    class FakeEvent:
+        chat_id = 100
+
+        async def respond(self, *args, **kwargs):
+            raise AssertionError("existing text path must not run when banner is enabled")
+
+        async def edit(self, *args, **kwargs):
+            raise AssertionError("existing text path must not run when banner is enabled")
+
+    bot = FakeBot()
+    event = FakeEvent()
+    with patch("utils.banners.repository", BannerRepository()), patch.object(buy, "bot", bot):
+        asyncio.run(buy.show_buy_menu(event))
+
+    assert len(bot.sent) == 1
+    chat_id, media, caption, buttons, force_document = bot.sent[0]
+    assert chat_id == 100
+    assert media.__class__.__name__ == "InputMediaUploadedPhoto"
+    assert "𝐒ᴇʟᴇᴄᴛ 𝐀ᴄᴄᴏᴜɴᴛ 𝐂ᴀᴛᴇɢᴏʀʏ" in caption
+    assert buttons
+    assert force_document is False

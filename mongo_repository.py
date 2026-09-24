@@ -103,13 +103,16 @@ class MongoRepository:
             query["enabled"] = True
         return self.db.banners.find_one(query)
 
-    def save_banner(self, key, content, file_id):
+    def save_banner(self, key, content, file_id, filename=None, content_type=None):
         now = self._now()
         existing = self.get_banner(key)
-        gridfs_id = self.banner_files.put(content, filename=f"{key}.jpg", content_type="image/jpeg")
+        filename = filename or f"{key}.jpg"
+        content_type = content_type or "image/jpeg"
+        gridfs_id = self.banner_files.put(content, filename=filename, content_type=content_type)
         document = {
             "key": str(key), "enabled": bool(existing.get("enabled", False)) if existing else False,
             "file_id": str(file_id), "gridfs_id": gridfs_id,
+            "filename": filename, "content_type": content_type,
             "created_at": existing.get("created_at", now) if existing else now,
             "updated_at": now,
         }

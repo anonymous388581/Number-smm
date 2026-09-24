@@ -9,10 +9,9 @@ from database import cur, db, get_usdt_rate, update_balance, approve_deposit, to
 from config import PE_GIFT, PE_LIGHTNING, P_MONEY, P_CARD, P_UPI, P_CW, P_NO, P_YES, P_WARN, P_INR, P_USDT, P_KEY, PE_CHECK, P_ACC, P_ID, LOG_CHANNEL_ID, LOG_CHANNELS, ADMIN_ID, SUPER_ADMINS, CWALLET_QR, CWALLET_ID, UPI_ID, bot, logger
 from utils.keyboards import style_btn
 from utils.states import deposit_input, waiting_proof, admin_dep_state, custom_dep_amt, get_user_lock
-from utils.banners import send_banner
+from utils.banners import send_bannered_message
 
 async def deposit_menu(event):
-    await send_banner(bot, event, "deposit")
     btns = [
         [style_btn("⚡ 𝐀ᴜᴛᴏ 𝐔𝐏𝐈 (𝐈ɴsᴛᴀɴᴛ 𝐐𝐑 & 𝐔𝐓𝐑)", "dep_choose_AutoUPI", "success", icon=5409271925014801629)],
         [style_btn("✍️ 𝐌ᴀɴᴜᴀʟ 𝐔𝐏𝐈 (𝐒ᴄʀᴇᴇɴsʜᴏᴛ 𝐏ʀᴏᴏғ)", "dep_choose_ManualUPI", "primary", icon=5409098988156629257)],
@@ -31,6 +30,8 @@ async def deposit_menu(event):
            f"💎 <b>𝐂ᴡᴀʟʟᴇᴛ:</b> 𝐂ʀʏᴘᴛᴏ ᴘᴀʏᴍᴇɴᴛ ᴡɪᴛʜ 5% ᴇxᴛʀᴀ ʙᴏɴᴜs.\n\n"
            f"<i>👇 𝐏ʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ʏᴏᴜʀ ᴘʀᴇғᴇʀʀᴇᴅ ᴍᴇᴛʜᴏᴅ:</i></blockquote>")
            
+    if await send_bannered_message(bot, event, "deposit", msg, btns):
+        return
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass

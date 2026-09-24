@@ -13,14 +13,13 @@ from utils.smm_client import (
     get_services_for_category, get_smm_service_details, get_service_inr_rate,
     create_smm_order, get_smm_order_status, PLATFORM_ICONS, PLATFORM_PREMIUM_ICONS
 )
-from utils.banners import send_banner
+from utils.banners import send_bannered_message
 
 # User state dictionary for SMM orders
 smm_order_state = {}
 
 # ── Step 1: Select Server ──
 async def show_smm_servers(event):
-    await send_banner(bot, event, "smm")
     btns = []
     for s_id, s_info in SMM_SERVERS.items():
         p_icon = 5408995930416362034 if s_id == 1 else 5409320020058584473
@@ -32,6 +31,8 @@ async def show_smm_servers(event):
            f"⚡ <b>𝐅ᴀsᴛ & 𝐈ɴsᴛᴀɴᴛ 𝐃ᴇʟɪᴠᴇʀʏ</b> ғᴏʀ ᴀʟʟ ᴍᴀᴊᴏʀ ᴘʟᴀᴛғᴏʀᴍs.\n\n"
            f"👇 <b>𝐏ʟᴇᴀsᴇ sᴇʟᴇᴄᴛ ᴀ 𝐒ᴇʀᴠᴇʀ ʙᴇʟᴏᴡ:</b></blockquote>")
            
+    if await send_bannered_message(bot, event, "smm", msg, btns):
+        return
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass

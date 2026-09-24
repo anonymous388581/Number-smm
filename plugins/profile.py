@@ -3,7 +3,7 @@ from telethon.errors import MessageNotModifiedError
 from database import cur, to_usd
 from config import PE_KISS, PE_CROWN, PE_FLOWER, P_ID, P_MONEY, P_CARD, P_USERS, P_CAL, P_GIFT, P_CART, P_USDT, P_PHONE
 from datetime import datetime
-from utils.banners import send_banner
+from utils.banners import send_bannered_message
 
 
 def format_date(value):
@@ -12,7 +12,6 @@ def format_date(value):
     return str(value or "")
 
 async def profile_handler(bot, event):
-    await send_banner(bot, event, "profile")
     uid = event.sender_id
     row = cur.execute("SELECT balance, total_deposited, joined_date, discount FROM users WHERE user_id=?", (uid,)).fetchone()
     if not row: return await bot.send_message(event.chat_id, "⚠️ Error: Please type /start to initialize your account.")
@@ -36,6 +35,8 @@ async def profile_handler(bot, event):
            f"{P_CAL} 𝐉ᴏɪɴᴇᴅ: {format_date(date)[:10]}</blockquote>\n\n"
            f"<blockquote>{ref_block}</blockquote>\n"
            f"<blockquote><i>(𝐒ʜᴀʀᴇ ᴛʜɪs ʟɪɴᴋ ᴡɪᴛʜ ʏᴏᴜʀ ғʀɪᴇɴᴅs ᴛᴏ ᴇᴀʀɴ ʙᴏɴᴜsᴇs!)</i></blockquote>")
+    if await send_bannered_message(bot, event, "profile", msg):
+        return
     await bot.send_message(event.chat_id, msg)
 
 async def stats_handler(bot, event, is_callback=False):

@@ -2,6 +2,7 @@ from telethon import events, Button
 
 from database import is_admin, has_perm, repository
 from utils.banners import BANNER_SECTIONS
+from utils.banners import send_bannered_message
 from utils.keyboards import style_btn
 from utils.states import admin_state
 
@@ -71,14 +72,9 @@ def register_banner_management(bot):
         banner = repository.get_banner(key, enabled_only=False)
         if not banner or not banner.get("file_id"):
             return await e.answer("No banner uploaded.", alert=True)
-        try:
-            content = repository.get_banner_content(key, enabled_only=False)
-            if content:
-                from io import BytesIO
-                await bot.send_file(e.chat_id, BytesIO(content), caption=BANNER_SECTIONS[key], force_document=False)
-            else:
-                await bot.send_file(e.chat_id, banner["file_id"], caption=BANNER_SECTIONS[key])
-        except Exception:
+        if not await send_bannered_message(
+            bot, e, key, BANNER_SECTIONS[key], enabled_only=False,
+        ):
             return await e.answer("Preview could not be sent.", alert=True)
         await e.answer("Preview sent.")
 
@@ -89,7 +85,12 @@ def register_banner_management(bot):
         state = admin_state.pop(e.sender_id)
         try:
             content = await e.download_media(file=bytes)
-            saved = repository.save_banner(state["key"], content, str(e.media.photo.id))
+            filename = getattr(e.file, "name", None) or f"{state['key']}.jpg"
+            content_type = getattr(e.file, "mime_type", None) or "image/jpeg"
+            saved = repository.save_banner(
+                state["key"], content, str(e.media.photo.id),
+                filename=filename, content_type=content_type,
+            )
             await e.reply("✅ Banner uploaded. It is OFF until you turn it ON.")
         except Exception:
             await e.reply("❌ Banner upload failed.")

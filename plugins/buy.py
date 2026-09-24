@@ -20,7 +20,7 @@ from config import (
     OTP_REGEX, bot, logger, API_ID, API_HASH
 )
 from utils.keyboards import style_btn
-from utils.banners import send_banner
+from utils.banners import send_bannered_message
 from utils.states import active_orders, session_buy_state, get_user_lock
 from utils.lzt import lzt_client, COUNTRY_TO_LZT
 from utils.stock_filters import claim_stock_account, stock_filter_clause
@@ -191,7 +191,6 @@ async def show_filters_catalog(event, page=1):
         await event.respond(msg, buttons=btns)
 
 async def show_buy_menu(event):
-    await send_banner(bot, event, "buy")
     show_more_filters = (
         get_more_account_filters_enabled()
         if get_bot_mode() == "manual" else True
@@ -219,6 +218,8 @@ async def show_buy_menu(event):
     ]
     if show_more_filters:
         btns.insert(3, [style_btn("🎯 𝐌ᴏʀᴇ 𝐀ᴄᴄᴏᴜɴᴛ 𝐅ɪʟᴛᴇʀs (𝐒ᴛᴀʀs/2𝐅𝐀...)", b"pg_filters|1", "success", icon=5409320020058584473)])
+    if await send_bannered_message(bot, event, "buy", msg, btns):
+        return
     if isinstance(event, events.CallbackQuery.Event):
         try: await event.edit(msg, buttons=btns)
         except MessageNotModifiedError: pass
